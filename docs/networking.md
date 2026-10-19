@@ -110,6 +110,12 @@ TUN interface. Its cleanup plan removes only the routes it introduced. The
 privileged caller still owns route snapshots, restoration of pre-existing
 routes, and recovery after an interrupted process.
 
+When the physical network changes, `LinuxClientRoutePlan::rebind_endpoint`
+rebuilds the endpoint exception route using the same family, interface, and
+tunnel-address validation as initial construction. The new plan must be
+applied before reconnecting the session; route cleanup and snapshot restoration
+remain owned by the privileged caller.
+
 `LinuxClientNetworkPlan` adds validated IPv4/IPv6 addresses for the TUN
 interface and emits address setup before routing, followed by reverse cleanup.
 It is still a command planner; applying the commands and restoring a route
