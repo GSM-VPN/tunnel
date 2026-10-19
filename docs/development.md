@@ -53,9 +53,11 @@ TUNNEL_CORE_MAX_PEERS=216 \
 cargo run -p tunnel-core --bin tunnel-core
 ```
 
-The Go Controller's `StartCore` helper passes these values to the child
-process and the existing `Supervisor` bounds restarts after crashes. The Core
-socket is local-only; data packets do not pass through the Controller.
+The Go Controller's `CoreController` starts the child through `StartCore`,
+reports STARTING/RUNNING/STOPPING/STOPPED/UNHEALTHY states, and uses the
+bounded `Supervisor` policy for crash restarts. Calling `Stop` cancels
+supervision and waits for the child to be collected. The Core socket is
+local-only; data packets do not pass through the Controller.
 
 프로토콜·암호화·네트워크 기능은 각 단계의 테스트 요구사항을 충족하기 전까지 실제 사용자 트래픽에 사용하지 않습니다.
 
