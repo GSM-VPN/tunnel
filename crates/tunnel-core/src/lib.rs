@@ -6,6 +6,7 @@ mod device;
 mod encrypted_engine;
 mod engine;
 mod protocol;
+mod session;
 mod transport;
 
 #[cfg(target_os = "linux")]
@@ -21,5 +22,8 @@ pub use linux_device::LinuxTunDevice;
 pub use protocol::{
     KeyGeneration, MAX_PACKET_SIZE, MAX_PAYLOAD_SIZE, PROTOCOL_NAME, PROTOCOL_VERSION, PacketType,
     ProtocolError, ProtocolVersion, SequenceNumber, SessionId, SessionState,
+};
+pub use session::{
+    LifecycleState, SessionError, SessionEvent, SessionMachine, SessionPolicy, Transition,
 };
 pub use transport::{TransportError, UdpTransport};
