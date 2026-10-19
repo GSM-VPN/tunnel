@@ -130,10 +130,14 @@ func (authorization VPNServerAuthorization) Approve(ctx context.Context, parts [
 	return authorization.Controller.ApplyPeerApproval(ctx, peer, requestID)
 }
 
-// Revoke removes a service approval from desired state and Core.
-func (authorization VPNServerAuthorization) Revoke(ctx context.Context, peerID, requestID uint64) error {
+// Revoke verifies the service signature and removes an approval from desired
+// state and Core.
+func (authorization VPNServerAuthorization) Revoke(ctx context.Context, parts []string, signature string, peerID, requestID uint64) error {
 	if authorization.Controller == nil {
 		return fmt.Errorf("%w: controller is required", ErrApprovalInvalid)
+	}
+	if err := authorization.Authenticator.Verify(parts, signature); err != nil {
+		return err
 	}
 	return authorization.Controller.RevokePeerApproval(ctx, peerID, requestID)
 }

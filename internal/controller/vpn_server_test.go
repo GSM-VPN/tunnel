@@ -82,7 +82,7 @@ func TestAuthorizationApprovalUpdatesDesiredStateWithoutExposingSecrets(t *testi
 	if _, err := service.CreateSession(context.Background(), approval.PeerID, 1, 2); !errors.Is(err, ErrCoreNotStarted) {
 		t.Fatalf("unexpected session error: %v", err)
 	}
-	if err := service.Revoke(context.Background(), approval.PeerID, 3); err != nil {
+	if err := service.Revoke(context.Background(), parts, signature, approval.PeerID, 3); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := controller.DesiredState().peers[approval.PeerID]; ok {
