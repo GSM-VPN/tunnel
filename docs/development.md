@@ -112,6 +112,22 @@ Rust codec 기준 측정은 `cargo bench --package tunnel-core --bench codec`로
 
 프로토콜·암호화·네트워크 기능은 각 단계의 테스트 요구사항을 충족하기 전까지 실제 사용자 트래픽에 사용하지 않습니다.
 
+## 오류 처리 규칙
+
+오류는 발생 계층의 typed error로 반환하고, 상위 계층이 정책을 결정한다.
+
+- 프로토콜 codec과 IPC framing 오류는 해당 datagram/connection만 폐기한다.
+  원문 payload나 키 자료를 오류 문자열에 포함하지 않는다.
+- UDP·TUN의 일시적인 I/O 오류는 호출자에게 운영 오류로 반환한다. 재시도는
+  세션과 Controller의 bounded backoff 정책을 통해서만 수행하며 무한 재시도하지
+  않는다.
+- 인증 실패, replay 거부, 승인 철회, 키 갱신 실패는 보안 오류로 분류하고
+  영향을 받은 세션을 닫는다. 이전 키나 승인 상태를 재사용하지 않는다.
+- 설정 오류, 권한 오류, 리소스 한도 초과는 시작·관리 작업을 실패시키되 다른
+  세션과 프로세스 전체를 불필요하게 종료하지 않는다.
+- 운영 로그에는 오류의 안정적인 분류와 상태만 기록하고, raw packet, secret,
+  private key, 사용자 식별 정보는 기록하지 않는다.
+
 ## 테스트 범위
 
 Rust 단위 테스트는 프로토콜 codec, Noise 핸드셰이크, AEAD·Replay·키 세대,
