@@ -230,8 +230,8 @@ Tunnel Handshake / Encrypted Session
 
 - [ ] 목표 동시 사용자: 216명 이하
 - [ ] 사용자당 기본 세션 수: 1개
-- [ ] 핸드셰이크 Rate Limit 적용
-- [ ] 사용자별 패킷 Rate Limit 적용
+- [x] 핸드셰이크 Rate Limit 적용
+- [x] 사용자별 패킷 Rate Limit 적용
 - [ ] 전체 서버 UDP 수신 큐와 송신 큐 상한 설정
 - [ ] 비정상 패킷 처리 비용 제한
 - [ ] 한 사용자의 폭주가 다른 사용자의 세션에 영향을 주지 않도록 공정성 보장

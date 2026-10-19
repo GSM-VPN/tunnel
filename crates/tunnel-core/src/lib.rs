@@ -7,6 +7,7 @@ mod device;
 mod encrypted_engine;
 mod engine;
 mod protocol;
+mod rate_limit;
 mod session;
 mod session_table;
 mod transport;
@@ -59,6 +60,7 @@ pub use protocol::{
     PROTOCOL_NAME, PROTOCOL_VERSION, PacketType, ProtocolError, ProtocolVersion, SequenceNumber,
     SessionId, SessionState,
 };
+pub use rate_limit::{PeerRateLimiter, RateLimitKind, RateLimitPolicy};
 pub use session::{
     IdleAction, LifecycleState, SessionError, SessionEvent, SessionMachine, SessionPolicy,
     Transition,
