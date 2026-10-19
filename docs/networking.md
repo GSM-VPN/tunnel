@@ -60,6 +60,21 @@ checked against the sender address before protocol decoding. A server may
 receive from an unset endpoint during initial admission; the authenticated
 handshake must establish the peer before pinning a remote address.
 
+`SessionEndpointTable` provides the corresponding multi-session boundary.
+The authenticated admission path calls `pin` once, and each received
+datagram must pass `validate` for its `SessionId`. Endpoint changes never
+happen during validation: the caller must complete a new authenticated
+handshake and server-identity check before calling
+`rebind_after_authenticated_handshake`. Removing a session also removes its
+endpoint mapping. The table is bounded so an endpoint cannot be allocated
+outside the configured session limit.
+
+Transport loops use `UdpTransport::close` as their shared cancellation signal.
+After close, `is_closed` is true and both `send` and `receive` return
+`TransportError::Closed`; a loop should exit on that result rather than retry
+indefinitely. A receive timeout remains a transient I/O result and does not
+pretend that the transport was closed.
+
 `LinuxNetworkPlan` is the boundary between the validated policy and that
 privileged layer. It emits argv-safe `ip`, `sysctl`, and `nft` command records
 for server interface setup, IPv4 MASQUERADE, optional IPv6 addressing, and
