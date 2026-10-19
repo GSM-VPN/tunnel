@@ -184,7 +184,7 @@ Tunnel Handshake / Encrypted Session
 - [x] Resolver는 여러 외부 Upstream DNS Provider를 지원
 - [x] Upstream 장애 시 다음 Provider로 자동 전환
 - [ ] 가능하면 DoT 또는 DoH로 Upstream에 연결
-- [ ] DNS 응답은 표준 TTL 범위 안에서 캐시
+- [x] DNS 응답은 표준 TTL 범위 안에서 캐시
 - [x] 검열 회피를 목적으로 무기한 또는 임의의 DNS 결과를 저장하지 않음
 - [x] 기본적으로 질의 원문과 사용자별 DNS 기록을 영구 저장하지 않음
 - [x] 운영 장애 분석에 필요한 최소 메타데이터만 선택적으로 보관
