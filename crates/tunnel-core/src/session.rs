@@ -175,22 +175,21 @@ impl SessionMachine {
             | (
                 LifecycleState::Established,
                 SessionEvent::KeepaliveTimeout | SessionEvent::NetworkChanged,
-            )
-            | (LifecycleState::Rekeying, SessionEvent::RekeyFailed) => {
-                (LifecycleState::Reconnecting, Some(self.next_retry_delay()?))
+            ) => (LifecycleState::Reconnecting, Some(self.next_retry_delay()?)),
+            (LifecycleState::Rekeying, SessionEvent::RekeyFailed) => {
+                (LifecycleState::Closing, None)
             }
             (LifecycleState::Handshaking, SessionEvent::AuthenticationFailed)
             | (
-                LifecycleState::Established,
-                SessionEvent::PermissionRevoked | SessionEvent::ServerShutdown,
-            )
-            | (
-                LifecycleState::Connecting
+                LifecycleState::Disconnected
+                | LifecycleState::Connecting
                 | LifecycleState::Handshaking
                 | LifecycleState::Reconnecting
                 | LifecycleState::Established
                 | LifecycleState::Rekeying,
-                SessionEvent::CloseRequested,
+                SessionEvent::CloseRequested
+                | SessionEvent::PermissionRevoked
+                | SessionEvent::ServerShutdown,
             ) => (LifecycleState::Closing, None),
             (LifecycleState::Established, SessionEvent::RekeyRequested) => {
                 (LifecycleState::Rekeying, None)
@@ -319,6 +318,58 @@ mod tests {
         session.apply(SessionEvent::HandshakeStarted).unwrap();
         session.apply(SessionEvent::AuthenticationFailed).unwrap();
         assert_eq!(session.state(), LifecycleState::Closing);
+        assert!(session.apply(SessionEvent::RetryRequested).is_err());
+    }
+
+    #[test]
+    fn closes_when_rekey_fails_without_reusing_the_old_session() {
+        let mut session = SessionMachine::new(SessionPolicy::default());
+        for event in [
+            SessionEvent::ConnectRequested,
+            SessionEvent::HandshakeStarted,
+            SessionEvent::HandshakeSucceeded,
+            SessionEvent::RekeyRequested,
+        ] {
+            session.apply(event).unwrap();
+        }
+        let transition = session.apply(SessionEvent::RekeyFailed).unwrap();
+        assert_eq!(transition.to, LifecycleState::Closing);
+        assert!(session.apply(SessionEvent::RetryRequested).is_err());
+    }
+
+    #[test]
+    fn permission_revocation_closes_a_reconnecting_session() {
+        let mut session = SessionMachine::new(SessionPolicy::default());
+        for event in [
+            SessionEvent::ConnectRequested,
+            SessionEvent::HandshakeStarted,
+            SessionEvent::HandshakeFailed,
+        ] {
+            session.apply(event).unwrap();
+        }
+        let transition = session.apply(SessionEvent::PermissionRevoked).unwrap();
+        assert_eq!(transition.to, LifecycleState::Closing);
+        assert!(session.apply(SessionEvent::RetryRequested).is_err());
+    }
+
+    #[test]
+    fn server_shutdown_closes_during_handshake() {
+        let mut session = SessionMachine::new(SessionPolicy::default());
+        session.apply(SessionEvent::ConnectRequested).unwrap();
+        session.apply(SessionEvent::HandshakeStarted).unwrap();
+        assert_eq!(
+            session.apply(SessionEvent::ServerShutdown).unwrap().to,
+            LifecycleState::Closing
+        );
+    }
+
+    #[test]
+    fn explicit_close_is_valid_before_connecting() {
+        let mut session = SessionMachine::new(SessionPolicy::default());
+        assert_eq!(
+            session.apply(SessionEvent::CloseRequested).unwrap().to,
+            LifecycleState::Closing
+        );
         assert!(session.apply(SessionEvent::RetryRequested).is_err());
     }
 }
