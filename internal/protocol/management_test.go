@@ -3,6 +3,7 @@ package protocol
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestManagementMessagesDoNotExposeKeyFields(t *testing.T) {
@@ -91,5 +92,38 @@ func TestManagementFrameRejectsTruncationAndOversize(t *testing.T) {
 	request.Payload = make([]byte, MaxManagementFrameSize)
 	if _, err := request.MarshalFrame(); err != ErrManagementFrameTooLarge {
 		t.Fatalf("expected size error, got %v", err)
+	}
+}
+
+func TestPeerRegistrationPayloadRoundTripsStableLayout(t *testing.T) {
+	peer := PeerRegistration{
+		PeerID: 7, UserID: "user-7", PublicKey: [32]byte{3},
+		IPv4: [4]byte{10, 80, 0, 2}, HasIPv4: true,
+		ExpiresAt: time.Unix(1700000000, 0),
+	}
+	payload, err := MarshalPeerRegistration(peer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(payload) != 77 || payload[40] != 1 {
+		t.Fatalf("unexpected peer payload layout: len=%d flags=%d", len(payload), payload[40])
+	}
+	got, err := UnmarshalPeerRegistration(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, peer) {
+		t.Fatalf("peer mismatch: got %+v want %+v", got, peer)
+	}
+}
+
+func TestPeerRegistrationPayloadRejectsInvalidData(t *testing.T) {
+	_, err := MarshalPeerRegistration(PeerRegistration{UserID: "user", ExpiresAt: time.Unix(1, 0)})
+	if err != ErrPeerPayloadMalformed {
+		t.Fatalf("expected malformed peer error, got %v", err)
+	}
+	_, err = UnmarshalPeerRegistration([]byte{1, 2})
+	if err != ErrPeerPayloadMalformed {
+		t.Fatalf("expected malformed payload error, got %v", err)
 	}
 }

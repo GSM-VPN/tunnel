@@ -3,6 +3,10 @@
 const FRAME_PREFIX: usize = 4;
 const REQUEST_HEADER: usize = 2 + 8 + 2 + 4;
 const RESPONSE_HEADER: usize = 2 + 8 + 2 + 2 + 4;
+const PEER_PAYLOAD_FIXED_SIZE: usize = 8 + 32 + 1 + 4 + 16 + 8 + 2;
+const MAX_PEER_USER_ID_LENGTH: usize = 256;
+const PEER_FLAG_IPV4: u8 = 1 << 0;
+const PEER_FLAG_IPV6: u8 = 1 << 1;
 pub const MAX_MANAGEMENT_FRAME_SIZE: usize = 1 << 20;
 pub const OPERATION_INITIALIZE: u16 = 1;
 pub const OPERATION_START: u16 = 2;
@@ -45,6 +49,135 @@ pub enum ManagementError {
     LengthMismatch,
     ZeroVersion,
     UnknownOperation,
+    InvalidPeerPayload,
+    PeerUserIdTooLong,
+}
+
+/// Wire payload for the `RegisterPeer` management operation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PeerRegistrationPayload {
+    pub peer_id: u64,
+    pub public_key: [u8; 32],
+    pub ipv4: Option<[u8; 4]>,
+    pub ipv6: Option<[u8; 16]>,
+    pub expires_at_unix: u64,
+    pub user_id: String,
+}
+
+/// Encodes the stable Go/Rust `RegisterPeer` payload.
+///
+/// # Errors
+///
+/// Returns an error when the user ID, address set, or expiry is invalid.
+pub fn encode_peer_registration(
+    peer: &PeerRegistrationPayload,
+) -> Result<Vec<u8>, ManagementError> {
+    if peer.user_id.is_empty() || peer.user_id.len() > MAX_PEER_USER_ID_LENGTH {
+        return Err(ManagementError::PeerUserIdTooLong);
+    }
+    if peer.ipv4.is_none() && peer.ipv6.is_none() || peer.expires_at_unix == 0 {
+        return Err(ManagementError::InvalidPeerPayload);
+    }
+    let mut payload = vec![0; PEER_PAYLOAD_FIXED_SIZE + peer.user_id.len()];
+    payload[0..8].copy_from_slice(&peer.peer_id.to_be_bytes());
+    payload[8..40].copy_from_slice(&peer.public_key);
+    let mut flags = 0;
+    if let Some(ipv4) = peer.ipv4 {
+        flags |= PEER_FLAG_IPV4;
+        payload[41..45].copy_from_slice(&ipv4);
+    }
+    if let Some(ipv6) = peer.ipv6 {
+        flags |= PEER_FLAG_IPV6;
+        payload[45..61].copy_from_slice(&ipv6);
+    }
+    payload[40] = flags;
+    payload[61..69].copy_from_slice(&peer.expires_at_unix.to_be_bytes());
+    let user_id_len =
+        u16::try_from(peer.user_id.len()).map_err(|_| ManagementError::PeerUserIdTooLong)?;
+    payload[69..71].copy_from_slice(&user_id_len.to_be_bytes());
+    payload[71..].copy_from_slice(peer.user_id.as_bytes());
+    Ok(payload)
+}
+
+/// Decodes and validates the stable Go/Rust `RegisterPeer` payload.
+///
+/// # Errors
+///
+/// Returns an error when the payload has invalid lengths, flags, encoding, or
+/// expiry data.
+pub fn decode_peer_registration(
+    payload: &[u8],
+) -> Result<PeerRegistrationPayload, ManagementError> {
+    if payload.len() < PEER_PAYLOAD_FIXED_SIZE {
+        return Err(ManagementError::InvalidPeerPayload);
+    }
+    let user_id_len = usize::from(u16::from_be_bytes(
+        payload[69..71]
+            .try_into()
+            .map_err(|_| ManagementError::InvalidPeerPayload)?,
+    ));
+    if user_id_len == 0
+        || user_id_len > MAX_PEER_USER_ID_LENGTH
+        || payload.len() != PEER_PAYLOAD_FIXED_SIZE + user_id_len
+    {
+        return Err(ManagementError::InvalidPeerPayload);
+    }
+    let flags = payload[40];
+    if flags & !(PEER_FLAG_IPV4 | PEER_FLAG_IPV6) != 0 || flags == 0 {
+        return Err(ManagementError::InvalidPeerPayload);
+    }
+    let user_id = String::from_utf8(payload[71..].to_vec())
+        .map_err(|_| ManagementError::InvalidPeerPayload)?;
+    let mut public_key = [0; 32];
+    public_key.copy_from_slice(&payload[8..40]);
+    let ipv4 = (flags & PEER_FLAG_IPV4 != 0).then(|| {
+        let mut value = [0; 4];
+        value.copy_from_slice(&payload[41..45]);
+        value
+    });
+    let ipv6 = (flags & PEER_FLAG_IPV6 != 0).then(|| {
+        let mut value = [0; 16];
+        value.copy_from_slice(&payload[45..61]);
+        value
+    });
+    let expires_at_unix = u64::from_be_bytes(
+        payload[61..69]
+            .try_into()
+            .map_err(|_| ManagementError::InvalidPeerPayload)?,
+    );
+    if expires_at_unix == 0 {
+        return Err(ManagementError::InvalidPeerPayload);
+    }
+    Ok(PeerRegistrationPayload {
+        peer_id: u64::from_be_bytes(
+            payload[0..8]
+                .try_into()
+                .map_err(|_| ManagementError::InvalidPeerPayload)?,
+        ),
+        public_key,
+        ipv4,
+        ipv6,
+        expires_at_unix,
+        user_id,
+    })
+}
+
+/// Encodes the eight-byte `RemovePeer` payload.
+#[must_use]
+pub fn encode_peer_removal(peer_id: u64) -> Vec<u8> {
+    peer_id.to_be_bytes().to_vec()
+}
+
+/// Decodes the eight-byte `RemovePeer` payload.
+///
+/// # Errors
+///
+/// Returns an error when the payload is not exactly eight bytes.
+pub fn decode_peer_removal(payload: &[u8]) -> Result<u64, ManagementError> {
+    payload
+        .try_into()
+        .map(u64::from_be_bytes)
+        .map_err(|_| ManagementError::InvalidPeerPayload)
 }
 
 impl ManagementRequest {
@@ -261,5 +394,43 @@ mod tests {
             payload: Vec::new(),
         };
         assert_eq!(unknown.encode(), Err(ManagementError::UnknownOperation));
+    }
+
+    #[test]
+    fn peer_payload_matches_fixed_cross_language_layout() {
+        let peer = PeerRegistrationPayload {
+            peer_id: 7,
+            public_key: [3; 32],
+            ipv4: Some([10, 80, 0, 2]),
+            ipv6: None,
+            expires_at_unix: 1_700_000_000,
+            user_id: "user-7".to_owned(),
+        };
+        let encoded = encode_peer_registration(&peer).unwrap();
+        assert_eq!(encoded.len(), PEER_PAYLOAD_FIXED_SIZE + 6);
+        assert_eq!(encoded[0..8], 7_u64.to_be_bytes());
+        assert_eq!(encoded[40], PEER_FLAG_IPV4);
+        assert_eq!(decode_peer_registration(&encoded).unwrap(), peer);
+        assert_eq!(decode_peer_removal(&encode_peer_removal(7)).unwrap(), 7);
+    }
+
+    #[test]
+    fn rejects_invalid_peer_payloads() {
+        let peer = PeerRegistrationPayload {
+            peer_id: 1,
+            public_key: [0; 32],
+            ipv4: None,
+            ipv6: None,
+            expires_at_unix: 1,
+            user_id: "user".to_owned(),
+        };
+        assert_eq!(
+            encode_peer_registration(&peer),
+            Err(ManagementError::InvalidPeerPayload)
+        );
+        assert_eq!(
+            decode_peer_removal(&[1, 2]),
+            Err(ManagementError::InvalidPeerPayload)
+        );
     }
 }
