@@ -146,7 +146,7 @@ Tunnel Handshake / Encrypted Session
 - [x] NAT: Linux nftables MASQUERADE
 - [x] IPv6: 초기 버전부터 듀얼스택 터널링 지원
 - [x] DNS: VPN 연결 시 지정 Resolver 적용, 종료 시 원래 설정 복원 계획
-- [ ] Kill Switch: 초기 개발에서는 선택 기능, 실사용 전 필수 검증
+- [x] Kill Switch: 초기 개발에서는 선택 기능, 실사용 전 필수 검증
 
 ### 추가 확정 결정
 

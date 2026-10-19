@@ -126,6 +126,12 @@ Rollback deletes the dedicated nftables table. The plan does not execute
 firewall changes; the privileged adapter must apply it atomically and retain
 the rollback command for abnormal termination recovery.
 
+Kill Switch remains opt-in during development so that a declarative plan cannot
+accidentally alter a developer's host firewall. It is a release gate for a
+production VPN: before enabling it for users, a privileged Linux integration
+test must verify endpoint reachability, default-drop behavior, rollback, and
+recovery after an interrupted process.
+
 `ClientAddressPool` allocates paired client addresses starting at
 `10.80.0.2` and `fd80:1234:5678::2`, skips the server and network/broadcast
 addresses, and releases both families as one unit. Capacity exhaustion is
