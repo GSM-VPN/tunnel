@@ -4,6 +4,22 @@ const FRAME_PREFIX: usize = 4;
 const REQUEST_HEADER: usize = 2 + 8 + 2 + 4;
 const RESPONSE_HEADER: usize = 2 + 8 + 2 + 2 + 4;
 pub const MAX_MANAGEMENT_FRAME_SIZE: usize = 1 << 20;
+pub const OPERATION_INITIALIZE: u16 = 1;
+pub const OPERATION_START: u16 = 2;
+pub const OPERATION_STOP: u16 = 3;
+pub const OPERATION_REGISTER_PEER: u16 = 4;
+pub const OPERATION_REMOVE_PEER: u16 = 5;
+pub const OPERATION_CREATE_SESSION: u16 = 6;
+pub const OPERATION_TERMINATE_SESSION: u16 = 7;
+pub const OPERATION_GET_SESSION: u16 = 8;
+pub const OPERATION_LIST_SESSIONS: u16 = 9;
+pub const OPERATION_GET_STATISTICS: u16 = 10;
+pub const OPERATION_UPDATE_CONFIGURATION: u16 = 11;
+pub const OPERATION_GET_HEALTH: u16 = 12;
+
+fn is_known_operation(operation: u16) -> bool {
+    (OPERATION_INITIALIZE..=OPERATION_GET_HEALTH).contains(&operation)
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ManagementRequest {
@@ -28,6 +44,7 @@ pub enum ManagementError {
     Truncated,
     LengthMismatch,
     ZeroVersion,
+    UnknownOperation,
 }
 
 impl ManagementRequest {
@@ -40,6 +57,9 @@ impl ManagementRequest {
     pub fn encode(&self) -> Result<Vec<u8>, ManagementError> {
         if self.version == 0 {
             return Err(ManagementError::ZeroVersion);
+        }
+        if !is_known_operation(self.operation) {
+            return Err(ManagementError::UnknownOperation);
         }
         let payload_len =
             u32::try_from(self.payload.len()).map_err(|_| ManagementError::FrameTooLarge)?;
@@ -64,12 +84,16 @@ impl ManagementRequest {
         if payload_len != frame.len() - FRAME_PREFIX - REQUEST_HEADER {
             return Err(ManagementError::LengthMismatch);
         }
-        Ok(Self {
+        let request = Self {
             version: read_u16(frame, 4)?,
             request_id: read_u64(frame, 6)?,
             operation: read_u16(frame, 14)?,
             payload: frame.get(20..).ok_or(ManagementError::Truncated)?.to_vec(),
-        })
+        };
+        if !is_known_operation(request.operation) {
+            return Err(ManagementError::UnknownOperation);
+        }
+        Ok(request)
     }
 }
 
@@ -230,5 +254,12 @@ mod tests {
             payload: vec![0; MAX_MANAGEMENT_FRAME_SIZE],
         };
         assert_eq!(large.encode(), Err(ManagementError::FrameTooLarge));
+        let unknown = ManagementRequest {
+            version: 1,
+            request_id: 1,
+            operation: 99,
+            payload: Vec::new(),
+        };
+        assert_eq!(unknown.encode(), Err(ManagementError::UnknownOperation));
     }
 }
