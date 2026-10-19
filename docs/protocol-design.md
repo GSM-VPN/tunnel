@@ -37,6 +37,27 @@ oversized frames, and declared-length mismatches are rejected. There is no
 downgrade or version negotiation path in the initial implementation: a peer
 must use the exact supported version.
 
+## Control packet payloads
+
+The fixed header is shared by data and control packets. A handshake initiation
+or response carries exactly one Noise IK message in its payload. Its session
+ID is non-zero, its key generation is zero, and its sequence number starts at
+zero; the Noise message, rather than the tunnel AEAD, authenticates the
+handshake exchange. Handshake payloads are still bounded by the external packet
+limit.
+
+Keepalive carries an authenticated empty plaintext and consumes a normal
+directional sequence number. Session Termination carries an authenticated
+empty plaintext and is a terminal session event; the local session state
+provides the reason without putting user or key material on the wire.
+
+Protocol Error is a bounded authenticated control message reserved for a
+future stable error-code table. Until that table is implemented, unsupported
+control messages are rejected and the affected session is closed rather than
+interpreting an unknown payload. There is no version negotiation: only
+`1.0.0` is accepted, and receiving another version is a terminal protocol
+error, preventing downgrade to a weaker format.
+
 Inner IPv4/IPv6 packets are validated before encryption and after decryption.
 The validator checks total length, IPv4 header checksum, address family policy,
 and the encrypted payload MTU budget.

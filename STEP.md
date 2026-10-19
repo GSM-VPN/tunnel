@@ -326,11 +326,11 @@ Windows/Wintun
 - [x] 바이트 순서 결정
 - [x] 최대 패킷 크기 결정
 - [x] Packet Type 목록 확정
-- [ ] 핸드셰이크 패킷 형식 확정
+- [x] 핸드셰이크 패킷 형식 확정
 - [x] 데이터 패킷 형식 확정
-- [ ] Keepalive 및 종료 메시지 형식 확정
-- [ ] Protocol Error 처리 방식 확정
-- [ ] 버전 협상 방식 확정
+- [x] Keepalive 및 종료 메시지 형식 확정
+- [x] Protocol Error 처리 방식 확정
+- [x] 버전 협상 방식 확정
 - [x] 다운그레이드 공격 방어 방식 확정
 - [x] 알 수 없는 버전과 Packet Type 처리 방식 확정
 
