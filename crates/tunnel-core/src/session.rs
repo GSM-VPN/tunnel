@@ -124,6 +124,7 @@ impl SessionPolicy {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SessionMachine {
     state: LifecycleState,
+    handshake_attempts: u32,
     reconnect_attempts: u32,
     policy: SessionPolicy,
 }
@@ -133,6 +134,7 @@ impl SessionMachine {
     pub const fn new(policy: SessionPolicy) -> Self {
         Self {
             state: LifecycleState::Disconnected,
+            handshake_attempts: 0,
             reconnect_attempts: 0,
             policy,
         }
@@ -146,6 +148,11 @@ impl SessionMachine {
     #[must_use]
     pub const fn reconnect_attempts(&self) -> u32 {
         self.reconnect_attempts
+    }
+
+    #[must_use]
+    pub const fn handshake_attempts(&self) -> u32 {
+        self.handshake_attempts
     }
 
     /// Applies one event and returns the resulting transition.
@@ -162,17 +169,25 @@ impl SessionMachine {
                 (LifecycleState::Connecting, None)
             }
             (LifecycleState::Connecting, SessionEvent::HandshakeStarted) => {
+                self.start_handshake()?;
                 (LifecycleState::Handshaking, None)
             }
             (LifecycleState::Handshaking, SessionEvent::HandshakeSucceeded) => {
+                self.handshake_attempts = 0;
                 self.reconnect_attempts = 0;
                 (LifecycleState::Established, None)
             }
             (
                 LifecycleState::Handshaking,
                 SessionEvent::HandshakeFailed | SessionEvent::HandshakeTimedOut,
-            )
-            | (
+            ) => {
+                if self.handshake_attempts >= self.policy.max_handshake_attempts {
+                    (LifecycleState::Closing, None)
+                } else {
+                    (LifecycleState::Reconnecting, Some(self.next_retry_delay()?))
+                }
+            }
+            (
                 LifecycleState::Established,
                 SessionEvent::KeepaliveTimeout | SessionEvent::NetworkChanged,
             ) => (LifecycleState::Reconnecting, Some(self.next_retry_delay()?)),
@@ -222,6 +237,14 @@ impl SessionMachine {
             .policy
             .reconnect_delay(self.reconnect_attempts.saturating_add(1)))
     }
+
+    fn start_handshake(&mut self) -> Result<(), SessionError> {
+        if self.handshake_attempts >= self.policy.max_handshake_attempts {
+            return Err(SessionError::RetryLimitReached);
+        }
+        self.handshake_attempts = self.handshake_attempts.saturating_add(1);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -240,6 +263,7 @@ mod tests {
         }
         assert_eq!(session.state(), LifecycleState::Established);
         assert_eq!(session.reconnect_attempts(), 0);
+        assert_eq!(session.handshake_attempts(), 0);
     }
 
     #[test]
@@ -309,6 +333,25 @@ mod tests {
         let transition = session.apply(SessionEvent::HandshakeTimedOut).unwrap();
         assert_eq!(transition.to, LifecycleState::Reconnecting);
         assert_eq!(transition.reconnect_delay, Some(Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn closes_after_handshake_attempt_limit() {
+        let policy = SessionPolicy {
+            max_handshake_attempts: 2,
+            ..SessionPolicy::default()
+        };
+        let mut session = SessionMachine::new(policy);
+        session.apply(SessionEvent::ConnectRequested).unwrap();
+        session.apply(SessionEvent::HandshakeStarted).unwrap();
+        session.apply(SessionEvent::HandshakeFailed).unwrap();
+        session.apply(SessionEvent::RetryRequested).unwrap();
+        session.apply(SessionEvent::HandshakeStarted).unwrap();
+
+        let transition = session.apply(SessionEvent::HandshakeTimedOut).unwrap();
+        assert_eq!(transition.to, LifecycleState::Closing);
+        assert_eq!(session.handshake_attempts(), 2);
+        assert!(session.apply(SessionEvent::RetryRequested).is_err());
     }
 
     #[test]
