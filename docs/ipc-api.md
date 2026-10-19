@@ -4,6 +4,13 @@ The initial transport is a Unix Domain Socket. Each message is a four-byte
 big-endian frame length followed by a big-endian binary message. The maximum
 frame is 1 MiB.
 
+The Go Controller and Rust Core are separate processes. The Controller sends
+only control-plane state over this local socket; tunnel data packets stay in
+Rust. The Core loads `SERVER_PRIVATE_KEY` at its identity boundary and the
+Gateway service secret is not a Core IPC field. TUN and route application stay
+in the privileged platform adapter, while the data-plane process consumes the
+validated plan. No TCP listener or externally routable IPC endpoint is used.
+
 ## Request
 
 ```text
