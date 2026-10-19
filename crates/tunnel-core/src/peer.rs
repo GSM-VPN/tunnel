@@ -40,6 +40,8 @@ impl From<&PeerAuthorization> for PeerSummary {
 pub enum PeerRegistryError {
     Capacity,
     DuplicatePeer,
+    DuplicatePublicKey,
+    DuplicateAddress,
     EmptyUserId,
     InvalidAddress,
     InvalidExpiry,
@@ -87,6 +89,22 @@ impl PeerRegistry {
         }
         if self.peers.len() >= self.capacity {
             return Err(PeerRegistryError::Capacity);
+        }
+        if self
+            .peers
+            .values()
+            .any(|existing| existing.public_key == peer.public_key)
+        {
+            return Err(PeerRegistryError::DuplicatePublicKey);
+        }
+        if self.peers.values().any(|existing| {
+            peer.ipv4
+                .is_some_and(|address| existing.ipv4 == Some(address))
+                || peer
+                    .ipv6
+                    .is_some_and(|address| existing.ipv6 == Some(address))
+        }) {
+            return Err(PeerRegistryError::DuplicateAddress);
         }
         self.peers.insert(peer.peer_id, peer);
         Ok(())
@@ -196,5 +214,22 @@ mod tests {
         registry.revoke(1).unwrap();
         assert!(!registry.is_authorized(1, &key, now));
         assert!(registry.is_empty());
+    }
+
+    #[test]
+    fn rejects_reused_public_keys_and_tunnel_addresses() {
+        let now = UNIX_EPOCH;
+        let mut registry = PeerRegistry::new(3);
+        registry.register(peer(1, [1; 32]), now).unwrap();
+        assert_eq!(
+            registry.register(peer(2, [1; 32]), now),
+            Err(PeerRegistryError::DuplicatePublicKey)
+        );
+        let mut duplicate_address = peer(3, [3; 32]);
+        duplicate_address.ipv6 = Some(Ipv6Addr::LOCALHOST);
+        assert_eq!(
+            registry.register(duplicate_address, now),
+            Err(PeerRegistryError::DuplicateAddress)
+        );
     }
 }

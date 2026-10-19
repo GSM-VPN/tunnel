@@ -37,6 +37,10 @@ and packet admission, with a maximum number of tracked peer IDs. This keeps a
 single peer from consuming all admission work and prevents unbounded limiter
 state growth; platform adapters must invoke it before expensive processing.
 
+`PeerRegistry` treats client public keys and assigned IPv4/IPv6 addresses as
+unique approval state. Reusing identity material or an address is rejected
+until the previous approval is revoked.
+
 ## Known gaps
 
 Noise IK handshake integration with the data-plane rekey flow, long-term
