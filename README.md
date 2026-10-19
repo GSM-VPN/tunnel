@@ -13,14 +13,17 @@ GSM VPN Tunnel은 GSM VPN의 자체 터널링 엔진을 구현하는 저장소�
 ## 로컬 검증
 
 ```bash
-go test ./...
-go vet ./...
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --all-targets --all-features
+./scripts/validate.sh
 ```
 
-현재 저장소는 Phase 0 초기 workspace 기반을 제공하며, 실제 네트워크 기능은 단계별로 추가합니다.
+codec 측정은 다음 명령으로 실행합니다.
+
+```bash
+cargo bench --package tunnel-core --bench codec
+```
+
+현재 저장소는 Linux 기반의 연구·개발용 Core와 제어 계층을 제공하며,
+실제 네트워크 적용과 배포 권한 설정은 별도 통합 검증이 필요합니다.
 
 ## 보안 안내
 

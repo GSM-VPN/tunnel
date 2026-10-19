@@ -65,6 +65,7 @@ their addresses and closing any associated sessions before the request runs.
 ## Known gaps
 
 Automatic Noise IK handshake integration with the data-plane rekey flow,
-long-term identity verification, caller authorization, rate limiting,
-namespace integration, DNS/IPv6 leak testing, and independent review remain
-required before deployment.
+namespace integration, DNS/IPv6 leak testing, deployment service-account
+hardening, and independent review remain required before deployment. Caller
+authorization and admission rate limiting are implemented at their local
+management boundaries, but still require deployment-level verification.

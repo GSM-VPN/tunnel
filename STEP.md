@@ -1198,17 +1198,17 @@ WireGuard와의 성능 비교는 이 프로젝트의 필수 요구사항에서 �
 
 ### 15.1. 필수 문서
 
-- [ ] `README.md`
-- [ ] `docs/architecture.md`
-- [ ] `docs/protocol.md`
-- [ ] `docs/security.md`
-- [ ] `docs/ipc-api.md`
-- [ ] `docs/networking.md`
-- [ ] `docs/development.md`
-- [ ] `docs/session-state-machine.md`
-- [ ] `docs/performance.md`
-- [ ] `SECURITY.md`
-- [ ] `CONTRIBUTING.md`
+- [x] `README.md`
+- [x] `docs/architecture.md`
+- [x] `docs/protocol.md`
+- [x] `docs/security.md`
+- [x] `docs/ipc-api.md`
+- [x] `docs/networking.md`
+- [x] `docs/development.md`
+- [x] `docs/session-state-machine.md`
+- [x] `docs/performance.md`
+- [x] `SECURITY.md`
+- [x] `CONTRIBUTING.md`
 
 ### 15.2. 관측 가능성
 

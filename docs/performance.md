@@ -14,3 +14,14 @@ Measure:
 
 Use the existing unit tests for deterministic correctness, then add Linux
 network-namespace and benchmark jobs before comparing against WireGuard.
+
+The repository currently includes a reproducible codec-only benchmark:
+
+```bash
+cargo bench --package tunnel-core --bench codec
+```
+
+It measures 100,000 encode/decode round trips for a 512-byte payload and
+prints elapsed nanoseconds and processed bytes. This is a codec regression
+signal, not an end-to-end VPN throughput result; record the commit and host
+details before comparing runs.
