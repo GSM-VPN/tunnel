@@ -114,12 +114,12 @@ Tunnel Handshake / Encrypted Session
 
 ### 세션 기본값
 
-- [ ] 핸드셰이크 타임아웃: 5초
-- [ ] 핸드셰이크 재시도: 최대 5회
-- [ ] Keepalive: 25초 유휴 시 전송
-- [ ] 세션 유휴 타임아웃: 120초
-- [ ] 재연결: 지수 백오프, 1초부터 60초까지
-- [ ] 최대 재연결 시도: 10회 후 연결 실패 상태 전환
+- [x] 핸드셰이크 타임아웃: 5초
+- [x] 핸드셰이크 재시도: 최대 5회
+- [x] Keepalive: 25초 유휴 시 전송
+- [x] 세션 유휴 타임아웃: 120초
+- [x] 재연결: 지수 백오프, 1초부터 60초까지
+- [x] 최대 재연결 시도: 10회 후 연결 실패 상태 전환
 - [ ] Endpoint 변경: 새 핸드셰이크와 암호학적 검증 후에만 허용
 - [x] 권한 철회: 기존 세션 즉시 종료
 - [ ] 세션 종료 시 키와 카운터 폐기
@@ -142,9 +142,9 @@ Tunnel Handshake / Encrypted Session
 - [x] IPv6 서버 주소: `fd80:1234:5678::1`
 - [x] IPv6 클라이언트 주소: `fd80:1234:5678::2`부터 동적 할당
 - [x] IPv6 외부 연결: 서버에 라우팅 가능한 Prefix가 있으면 라우팅하고, 없으면 명시된 NAT66 정책 적용
-- [ ] VPN 서버 Endpoint: 물리 인터페이스 예외 경로 유지
-- [ ] NAT: Linux nftables MASQUERADE
-- [ ] IPv6: 초기 버전부터 듀얼스택 터널링 지원
+- [x] VPN 서버 Endpoint: 물리 인터페이스 예외 경로 유지
+- [x] NAT: Linux nftables MASQUERADE
+- [x] IPv6: 초기 버전부터 듀얼스택 터널링 지원
 - [ ] DNS: VPN 연결 시 지정 Resolver 적용, 종료 시 원래 설정 복원
 - [ ] Kill Switch: 초기 개발에서는 선택 기능, 실사용 전 필수 검증
 
@@ -193,12 +193,12 @@ Tunnel Handshake / Encrypted Session
 
 #### 세션과 재연결
 
-- [ ] 핸드셰이크 타임아웃: 5초
-- [ ] 핸드셰이크 재시도: 최대 5회
-- [ ] Keepalive: 25초 유휴 시 전송
-- [ ] 세션 유휴 타임아웃: 120초
-- [ ] 재연결: 1초부터 시작하는 지수 백오프, 최대 60초
-- [ ] 최대 재연결 시도: 10회
+- [x] 핸드셰이크 타임아웃: 5초
+- [x] 핸드셰이크 재시도: 최대 5회
+- [x] Keepalive: 25초 유휴 시 전송
+- [x] 세션 유휴 타임아웃: 120초
+- [x] 재연결: 1초부터 시작하는 지수 백오프, 최대 60초
+- [x] 최대 재연결 시도: 10회
 - [ ] Endpoint 변경은 새 핸드셰이크와 서버 신원 검증 후 허용
 - [ ] 권한 철회·키 파기·인증 실패 시 재연결하지 않음
 
@@ -253,25 +253,25 @@ Tunnel Handshake / Encrypted Session
 
 ### Go–Rust 연동 기본값
 
-- [ ] Go Controller와 Rust Tunnel Core는 별도 프로세스로 실행
-- [ ] 초기 IPC: Linux Unix Domain Socket
-- [ ] IPC 포맷: 길이 프리픽스가 있는 버전 지정 바이너리 메시지
-- [ ] IPC 요청에는 request ID와 operation code 포함
-- [ ] IPC 연결은 외부 네트워크에 노출하지 않음
+- [x] Go Controller와 Rust Tunnel Core는 별도 프로세스로 실행
+- [x] 초기 IPC: Linux Unix Domain Socket
+- [x] IPC 포맷: 길이 프리픽스가 있는 버전 지정 바이너리 메시지
+- [x] IPC 요청에는 request ID와 operation code 포함
+- [x] IPC 연결은 외부 네트워크에 노출하지 않음
 - [ ] Socket 파일 권한은 전용 서비스 사용자만 접근 가능하도록 제한
-- [ ] 데이터 패킷은 IPC를 통과하지 않음
-- [ ] IPC에는 Peer·세션·설정·상태·메트릭 제어만 전달
-- [ ] `GATEWAY_SHARED_SECRET` 원문은 IPC로 전달하지 않음
-- [ ] 필요한 경우 Controller가 인증된 승인 결과만 Rust Core에 전달
-- [ ] `SERVER_PRIVATE_KEY`는 Rust Core의 장기 키 저장·로딩 경계를 통해서만 사용
+- [x] 데이터 패킷은 IPC를 통과하지 않음
+- [x] IPC에는 Peer·세션·설정·상태·메트릭 제어만 전달
+- [x] `GATEWAY_SHARED_SECRET` 원문은 IPC로 전달하지 않음
+- [x] 필요한 경우 Controller가 인증된 승인 결과만 Rust Core에 전달
+- [x] `SERVER_PRIVATE_KEY`는 Rust Core의 장기 키 저장·로딩 경계를 통해서만 사용
 - [ ] Rust Core 장애 시 Go Controller가 상태를 `UNHEALTHY`로 전환
 - [ ] 자동 재시작은 제한된 횟수와 백오프를 사용
 
 ### 초기 범위 제외
 
-- [ ] IPv6 정식 터널링은 초기 범위에 포함
-- [ ] 자체 NAT 엔진은 구현하지 않음
-- [ ] 자체 패킷 단편화·재조립은 초기 범위에서 제외
+- [x] IPv6 정식 터널링은 초기 범위에 포함
+- [x] 자체 NAT 엔진은 구현하지 않음
+- [x] 자체 패킷 단편화·재조립은 초기 범위에서 제외
 - [ ] macOS 네트워크 인터페이스는 Windows 이후 검토
 - [ ] 공용 사용자 대상 배포는 독립 보안 검토 전 금지
 
