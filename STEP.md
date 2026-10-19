@@ -76,7 +76,7 @@ Offset  Size  Field
 - [x] Replay Window 기본 크기: 2,048 packets
 - [ ] 키 갱신: 1시간 또는 방향별 1GiB 전송 중 먼저 도달하는 조건
 - [ ] 키 갱신 실패 시 세션을 안전하게 종료
-- [ ] 키·평문 패킷·암호문을 로그에 기록하지 않음
+- [x] 키·평문 패킷·암호문을 로그에 기록하지 않음
 
 ### 기존 `vpn-server` 인증 설정 연동
 
@@ -248,7 +248,7 @@ Tunnel Handshake / Encrypted Session
 - [x] Replay 거부 수 제공
 - [ ] 재연결 횟수와 평균 복구 시간 제공
 - [ ] DNS Resolver Upstream별 성공·실패·지연시간 제공
-- [ ] 로그에는 키, 평문 패킷, DNS 질의 원문을 기록하지 않음
+- [x] 로그에는 키, 평문 패킷, DNS 질의 원문을 기록하지 않음
 - [ ] 키 파기·승인 철회·권한 변경은 감사 로그로 기록
 
 ### Go–Rust 연동 기본값
@@ -416,7 +416,7 @@ Windows/Wintun
 - [x] Rust Clippy 설정
 - [ ] 공통 오류 처리 규칙 정의
 - [x] 로그 레벨과 로그 포맷 정의
-- [ ] 비밀값을 출력하지 않는 Debug/Display 규칙 정의
+- [x] 비밀값을 출력하지 않는 Debug/Display 규칙 정의
 - [x] 린트 및 포맷 검사 자동화
 
 ### 1.3. CI 구축

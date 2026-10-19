@@ -96,6 +96,11 @@ Controller의 운영 로그는 `log/slog` 구조화 이벤트로 기록한다. �
 Controller가 로그 필드로 전달하지 않는다. 로그 저장소를 연결할 때도 동일한
 비밀정보 금지 정책을 유지해야 한다.
 
+Rust의 장기 키와 승인 피어 타입도 `Debug`에서 원문을 노출하지 않는다. 피어
+요약·승인 객체는 `peer_id`와 주소 같은 운영 필드만 보여 주고 사용자 ID와
+공개키는 `[redacted]`로 표시한다. Go의 `PeerRegistration.String()`도 Peer ID만
+반환한다.
+
 ## 로컬 검증과 측정
 
 Linux 개발 환경에서는 저장소 루트에서 `./scripts/validate.sh`를 실행하면
