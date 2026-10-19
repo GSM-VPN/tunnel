@@ -8,3 +8,6 @@ target/
 # Local development
 .env
 .DS_Store
+
+# Agent
+.codex
