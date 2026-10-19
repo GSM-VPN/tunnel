@@ -3,6 +3,7 @@
 use std::{env, fmt};
 
 use x25519_dalek::{PublicKey, StaticSecret};
+use zeroize::Zeroizing;
 
 const SERVER_PRIVATE_KEY_ENV: &str = "SERVER_PRIVATE_KEY";
 
@@ -17,7 +18,7 @@ pub enum IdentityConfigError {
 /// Server identity held by the Rust Core. The private key is never exposed in
 /// formatting, IPC, metrics, or public accessors.
 pub struct ServerIdentity {
-    private_key: StaticSecret,
+    private_key: Zeroizing<[u8; 32]>,
     public_key: PublicKey,
 }
 
@@ -54,15 +55,15 @@ impl ServerIdentity {
         if encoded.len() != 64 {
             return Err(IdentityConfigError::InvalidPrivateKeyLength);
         }
-        let mut private_bytes = [0; 32];
+        let mut private_bytes = Zeroizing::new([0; 32]);
         for (index, byte) in private_bytes.iter_mut().enumerate() {
             *byte = (hex_value(encoded.as_bytes()[index * 2])? << 4)
                 | hex_value(encoded.as_bytes()[index * 2 + 1])?;
         }
-        let private_key = StaticSecret::from(private_bytes);
-        let public_key = PublicKey::from(&private_key);
+        let private_secret = StaticSecret::from(*private_bytes);
+        let public_key = PublicKey::from(&private_secret);
         Ok(Self {
-            private_key,
+            private_key: private_bytes,
             public_key,
         })
     }
@@ -74,7 +75,7 @@ impl ServerIdentity {
     }
 
     pub(crate) fn private_key(&self) -> &[u8; 32] {
-        self.private_key.as_bytes()
+        &self.private_key
     }
 }
 

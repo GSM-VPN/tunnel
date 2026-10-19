@@ -3,6 +3,7 @@ use chacha20poly1305::{
     aead::{Aead, Payload},
 };
 use sha2::{Digest, Sha256};
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::protocol::{AEAD_TAG_SIZE, HEADER_SIZE};
 use crate::{
@@ -122,7 +123,7 @@ impl ReplayWindow {
 
 /// ChaCha20-Poly1305 session cipher with a direction-specific nonce domain.
 pub struct SessionCipher {
-    key: [u8; 32],
+    key: Zeroizing<[u8; 32]>,
     session_id: SessionId,
     key_generation: KeyGeneration,
     direction: u8,
@@ -131,14 +132,14 @@ pub struct SessionCipher {
 
 impl SessionCipher {
     #[must_use]
-    pub const fn new(
+    pub fn new(
         key: [u8; 32],
         session_id: SessionId,
         key_generation: KeyGeneration,
         direction: u8,
     ) -> Self {
         Self {
-            key,
+            key: Zeroizing::new(key),
             session_id,
             key_generation,
             direction,
@@ -166,7 +167,8 @@ impl SessionCipher {
         if key_generation.0 <= self.key_generation.0 {
             return Err(CryptoError::InvalidKeyGeneration);
         }
-        self.key = key;
+        self.key.zeroize();
+        self.key = Zeroizing::new(key);
         self.key_generation = key_generation;
         self.replay = ReplayWindow::new();
         Ok(())
@@ -238,7 +240,7 @@ impl SessionCipher {
     }
 
     fn cipher(&self) -> ChaCha20Poly1305 {
-        ChaCha20Poly1305::new(Key::from_slice(&self.key))
+        ChaCha20Poly1305::new(Key::from_slice(&*self.key))
     }
 
     fn nonce(&self, sequence: u64) -> Nonce {
