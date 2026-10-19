@@ -11,6 +11,7 @@ pub enum EncryptedTunnelError {
     Protocol(ProtocolError),
     Crypto(crate::CryptoError),
     Transport(TransportError),
+    UnexpectedPacketType(PacketType),
 }
 
 impl From<DeviceError> for EncryptedTunnelError {
@@ -90,6 +91,26 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
         Ok(sent)
     }
 
+    /// Sends an authenticated keepalive without touching the tunnel device.
+    ///
+    /// # Errors
+    ///
+    /// Returns an encryption, protocol, or transport error.
+    pub fn send_keepalive(&mut self) -> Result<usize, EncryptedTunnelError> {
+        let header = TunnelHeader {
+            version: PROTOCOL_VERSION,
+            packet_type: PacketType::Keepalive,
+            flags: 0,
+            session_id: self.session_id,
+            sequence_number: SequenceNumber(self.next_sequence),
+            key_generation: crate::KeyGeneration(0),
+        };
+        let packet = self.sender.seal(header, &[])?;
+        let sent = self.transport.send(&packet.encode()?)?;
+        self.next_sequence = self.next_sequence.saturating_add(1);
+        Ok(sent)
+    }
+
     /// Receives, authenticates, decrypts, and writes one device packet.
     ///
     /// # Errors
@@ -101,7 +122,11 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
         let (length, _) = self.transport.receive(&mut encoded)?;
         let packet = TunnelPacket::decode(&encoded[..length])?;
         let plaintext = self.receiver.open(&packet)?;
-        Ok(self.device.write_packet(&plaintext)?)
+        match packet.header.packet_type {
+            PacketType::TransportData => Ok(self.device.write_packet(&plaintext)?),
+            PacketType::Keepalive => Ok(0),
+            packet_type => Err(EncryptedTunnelError::UnexpectedPacketType(packet_type)),
+        }
     }
 }
 
@@ -109,7 +134,8 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
 mod tests {
     use super::EncryptedTunnel;
     use crate::{
-        KeyGeneration, MemoryDevice, SessionCipher, SessionId, TunnelDevice, UdpTransport,
+        DeviceError, KeyGeneration, MemoryDevice, SessionCipher, SessionId, TunnelDevice,
+        UdpTransport,
     };
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
@@ -122,6 +148,7 @@ mod tests {
         let key = [9; 32];
         let session = SessionId::new(8).expect("session ID");
         let (mut client_device, server_device) = MemoryDevice::pair(1_400);
+        let mut server_application = server_device.clone();
         let mut client_application = client_device.clone();
         client_device
             .inject(b"encrypted packet")
@@ -153,5 +180,11 @@ mod tests {
         let mut output = [0; 1_400];
         assert_eq!(client_application.read_packet(&mut output), Ok(16));
         assert_eq!(&output[..16], b"encrypted packet");
+        client.send_keepalive().expect("keepalive sends");
+        assert_eq!(server.receive_next(), Ok(0));
+        assert_eq!(
+            server_application.read_packet(&mut output),
+            Err(DeviceError::WouldBlock)
+        );
     }
 }
