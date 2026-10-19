@@ -46,6 +46,13 @@ go test ./internal/protocol -fuzz=FuzzUnmarshalRequestFrameNeverPanics -fuzztime
 Fuzzing hardens parser boundaries but does not replace network integration
 tests, cryptographic review, or an independent security assessment.
 
+Device tests are split by responsibility: `device.rs` exercises the
+deterministic `MemoryDevice` queue and close semantics on every platform, while
+`linux_device.rs` contains Linux-only TUN validation and is compiled only on
+Linux. Creating `/dev/net/tun`, exchanging real IP packets, and verifying host
+interface cleanup remain privileged Linux integration tests rather than being
+mixed into the memory-device suite.
+
 On Unix, the Core process can be started with:
 
 ```bash
