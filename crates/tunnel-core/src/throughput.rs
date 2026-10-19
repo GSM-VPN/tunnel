@@ -192,4 +192,16 @@ mod tests {
         assert!(!limiter.allow(3, 1, start));
         assert_eq!(limiter.tracked_sessions(), 2);
     }
+
+    #[test]
+    fn measures_the_configured_216_session_capacity() {
+        let policy = ThroughputPolicy::default();
+        let start = UNIX_EPOCH + Duration::from_secs(1);
+        let mut limiter = FairByteRateLimiter::new(policy);
+        for session_id in 1..=216 {
+            assert!(limiter.allow(session_id, 1, start));
+        }
+        assert_eq!(limiter.tracked_sessions(), 216);
+        assert!(!limiter.allow(217, 1, start));
+    }
 }
