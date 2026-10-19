@@ -25,5 +25,12 @@ The controller validates the response version and request ID before returning
 it to callers. Frames are bounded and malformed lengths are rejected. Data
 packets never use this channel.
 
+The Rust Core provides a Unix-only `UnixManagementServer` that accepts one
+request per connection and dispatches health, statistics, peer registration,
+and peer removal operations. A malformed frame closes only that connection;
+the server does not pass its payload to the data plane. Successful responses
+use status `200`; malformed payloads use `400`, missing peers use `404`, and
+duplicate or capacity-limited peer registrations use `409`.
+
 Socket ownership, caller credentials, and operation-specific authorization
 must be enforced by the eventual daemon wrapper before production use.
