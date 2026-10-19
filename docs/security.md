@@ -23,6 +23,13 @@ general-purpose VPN before independent security review.
 a tunnel data key. `SERVER_PRIVATE_KEY` belongs at the Rust identity boundary;
 neither value belongs in logs, metrics, or management payloads.
 
+`ServerIdentity` loads `SERVER_PRIVATE_KEY` as exactly 32 bytes of hex inside
+Rust Core and derives the X25519 public key deterministically. Its debug output
+redacts the private key, and the Noise responder can consume the key only
+through this identity boundary. The Go Controller must keep
+`GATEWAY_SHARED_SECRET` in its own service-authentication boundary and never
+include it in Core IPC payloads.
+
 ## Known gaps
 
 Noise IK handshake integration with the data-plane rekey flow, long-term

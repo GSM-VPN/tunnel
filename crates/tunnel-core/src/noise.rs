@@ -2,6 +2,8 @@
 
 use snow::{Builder, HandshakeState, TransportState, params::NoiseParams};
 
+use crate::ServerIdentity;
+
 /// Noise pattern selected by the protocol specification.
 pub const NOISE_IK_PARAMS: &str = "Noise_IK_25519_ChaChaPoly_SHA256";
 const MAX_HANDSHAKE_MESSAGE_SIZE: usize = 1_400;
@@ -73,6 +75,19 @@ impl NoiseHandshake {
             state: Some(state),
             expected_remote_static: Some(initiator_public_key.to_vec()),
         })
+    }
+
+    /// Builds a responder directly from the Core's protected server identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns a construction error when the approved peer key or Noise
+    /// parameters are invalid.
+    pub fn responder_for_identity(
+        identity: &ServerIdentity,
+        initiator_public_key: &[u8],
+    ) -> Result<Self, NoiseHandshakeError> {
+        Self::responder(identity.private_key(), initiator_public_key)
     }
 
     #[must_use]
@@ -254,5 +269,19 @@ mod tests {
             approved_responder.read_message(&approved_first),
             Ok(payload) if payload == b"hello"
         ));
+    }
+
+    #[test]
+    fn responder_can_use_the_protected_server_identity_boundary() {
+        let params: NoiseParams = NOISE_IK_PARAMS.parse().unwrap();
+        let builder = Builder::new(params);
+        let initiator_key = builder.generate_keypair().unwrap();
+        let identity = crate::ServerIdentity::from_hex(&"22".repeat(32)).unwrap();
+        let mut initiator =
+            NoiseHandshake::initiator(&initiator_key.private, &identity.public_key()).unwrap();
+        let mut responder =
+            NoiseHandshake::responder_for_identity(&identity, &initiator_key.public).unwrap();
+        let first = initiator.write_message(b"identity-bound").unwrap();
+        assert_eq!(responder.read_message(&first).unwrap(), b"identity-bound");
     }
 }

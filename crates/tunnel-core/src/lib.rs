@@ -13,6 +13,7 @@ mod transport;
 #[cfg(target_os = "linux")]
 mod linux_device;
 
+mod identity;
 mod key_rotation;
 mod management;
 #[cfg(unix)]
@@ -27,6 +28,7 @@ pub use crypto::{CryptoError, ReplayWindow, SessionCipher};
 pub use device::{DeviceError, MemoryDevice, TunnelDevice};
 pub use encrypted_engine::{EncryptedTunnel, EncryptedTunnelError};
 pub use engine::{PlainTunnel, TunnelError};
+pub use identity::{IdentityConfigError, ServerIdentity};
 pub use key_rotation::{KeyRotationPolicy, RotationReason};
 #[cfg(target_os = "linux")]
 pub use linux_device::LinuxTunDevice;
