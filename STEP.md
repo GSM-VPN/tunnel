@@ -225,7 +225,7 @@ Tunnel Handshake / Encrypted Session
 - [x] TUN·라우팅 설정 권한과 데이터 플레인 권한을 가능한 한 분리
 - [x] Socket 파일 접근 권한은 전용 서비스 사용자로 제한
 - [x] IPC 외부 네트워크 노출 금지
-- [ ] 이 연동은 기존 `vpn-server`의 설정·환경변수·API 형태와 호환되도록 구현
+- [x] 이 연동은 기존 `vpn-server`의 설정·환경변수·API 형태와 호환되도록 구현
 
 #### 서버 자원 제한
 

@@ -20,6 +20,13 @@ Gateway URL이나 엔드포인트를 추측해 직접 호출하지 않는다. �
 `VPNServerAuthorization`이 정규화된 승인 결과를 받는 명시적 경계를 제공한다.
 실제 Gateway/VPN Server 어댑터는 해당 API 계약이 확정된 뒤 이 경계에 연결한다.
 
+배포 시 `ParseVPNServerConfig`는 기존 `GATEWAY_SHARED_SECRET`와 함께
+`VPN_SERVER_ID`, `TUNNEL_CORE_BINARY`, `TUNNEL_CORE_IPC_SOCKET`,
+`TUNNEL_CORE_MAX_PEERS`를 읽는다. Core 바이너리와 소켓은 명시적으로
+지정해야 하며, Peer 상한은 216 이하로 검증한다. `Authenticator()`가
+생성한 검증기 외에는 secret을 전달하지 않으므로 Core 환경과 IPC payload에는
+secret이 포함되지 않는다.
+
 ## 승인 흐름
 
 ```text
