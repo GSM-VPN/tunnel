@@ -22,7 +22,9 @@ pub enum SessionEvent {
     HandshakeStarted,
     HandshakeSucceeded,
     HandshakeFailed,
+    HandshakeTimedOut,
     AuthenticationFailed,
+    KeepaliveSucceeded,
     KeepaliveTimeout,
     NetworkChanged,
     RekeyRequested,
@@ -51,6 +53,14 @@ pub struct Transition {
     pub from: LifecycleState,
     pub to: LifecycleState,
     pub reconnect_delay: Option<Duration>,
+}
+
+/// Work selected by the session timer for an established session.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IdleAction {
+    SendKeepalive,
+    Reconnect,
+    None,
 }
 
 /// Session timing and retry defaults from `STEP.md`.
@@ -96,6 +106,17 @@ impl SessionPolicy {
     #[must_use]
     pub fn peer_timed_out(&self, idle_for: Duration) -> bool {
         idle_for >= self.idle_timeout
+    }
+
+    #[must_use]
+    pub fn idle_action(&self, idle_for: Duration) -> IdleAction {
+        if self.peer_timed_out(idle_for) {
+            IdleAction::Reconnect
+        } else if self.keepalive_due(idle_for) {
+            IdleAction::SendKeepalive
+        } else {
+            IdleAction::None
+        }
     }
 }
 
@@ -147,7 +168,10 @@ impl SessionMachine {
                 self.reconnect_attempts = 0;
                 (LifecycleState::Established, None)
             }
-            (LifecycleState::Handshaking, SessionEvent::HandshakeFailed)
+            (
+                LifecycleState::Handshaking,
+                SessionEvent::HandshakeFailed | SessionEvent::HandshakeTimedOut,
+            )
             | (
                 LifecycleState::Established,
                 SessionEvent::KeepaliveTimeout | SessionEvent::NetworkChanged,
@@ -171,7 +195,8 @@ impl SessionMachine {
             (LifecycleState::Established, SessionEvent::RekeyRequested) => {
                 (LifecycleState::Rekeying, None)
             }
-            (LifecycleState::Rekeying, SessionEvent::RekeySucceeded) => {
+            (LifecycleState::Rekeying, SessionEvent::RekeySucceeded)
+            | (LifecycleState::Established, SessionEvent::KeepaliveSucceeded) => {
                 (LifecycleState::Established, None)
             }
             (LifecycleState::Reconnecting, SessionEvent::RetryRequested) => {
@@ -248,6 +273,43 @@ mod tests {
         assert!(policy.keepalive_due(Duration::from_secs(25)));
         assert!(!policy.keepalive_due(Duration::from_secs(120)));
         assert!(policy.peer_timed_out(Duration::from_secs(120)));
+        assert_eq!(
+            policy.idle_action(Duration::from_secs(24)),
+            IdleAction::None
+        );
+        assert_eq!(
+            policy.idle_action(Duration::from_secs(25)),
+            IdleAction::SendKeepalive
+        );
+        assert_eq!(
+            policy.idle_action(Duration::from_secs(120)),
+            IdleAction::Reconnect
+        );
+    }
+
+    #[test]
+    fn accepts_authenticated_keepalive_without_leaving_established_state() {
+        let mut session = SessionMachine::new(SessionPolicy::default());
+        for event in [
+            SessionEvent::ConnectRequested,
+            SessionEvent::HandshakeStarted,
+            SessionEvent::HandshakeSucceeded,
+        ] {
+            session.apply(event).unwrap();
+        }
+        let transition = session.apply(SessionEvent::KeepaliveSucceeded).unwrap();
+        assert_eq!(transition.from, LifecycleState::Established);
+        assert_eq!(transition.to, LifecycleState::Established);
+    }
+
+    #[test]
+    fn handshake_timeout_uses_bounded_reconnect_policy() {
+        let mut session = SessionMachine::new(SessionPolicy::default());
+        session.apply(SessionEvent::ConnectRequested).unwrap();
+        session.apply(SessionEvent::HandshakeStarted).unwrap();
+        let transition = session.apply(SessionEvent::HandshakeTimedOut).unwrap();
+        assert_eq!(transition.to, LifecycleState::Reconnecting);
+        assert_eq!(transition.reconnect_delay, Some(Duration::from_secs(1)));
     }
 
     #[test]
