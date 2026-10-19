@@ -1,6 +1,7 @@
 use crate::{
-    DeviceError, MAX_PACKET_SIZE, PROTOCOL_VERSION, PacketType, ProtocolError, SequenceNumber,
-    SessionId, TransportError, TunnelDevice, TunnelHeader, TunnelPacket, UdpTransport,
+    DeviceError, MAX_PACKET_SIZE, Metrics, PROTOCOL_VERSION, PacketType, ProtocolError,
+    SequenceNumber, SessionId, TransportError, TunnelDevice, TunnelHeader, TunnelPacket,
+    UdpTransport,
 };
 
 /// Errors returned by the unencrypted research tunnel.
@@ -44,6 +45,7 @@ pub struct PlainTunnel<D> {
     pub(crate) transport: UdpTransport,
     session_id: SessionId,
     next_sequence: u64,
+    metrics: Option<Metrics>,
 }
 
 impl<D: TunnelDevice> PlainTunnel<D> {
@@ -54,6 +56,20 @@ impl<D: TunnelDevice> PlainTunnel<D> {
             transport,
             session_id,
             next_sequence: 0,
+            metrics: None,
+        }
+    }
+
+    /// Attaches optional secret-free counters to this tunnel.
+    #[must_use]
+    pub fn with_metrics(mut self, metrics: Metrics) -> Self {
+        self.metrics = Some(metrics);
+        self
+    }
+
+    fn record_packet_error(&self) {
+        if let Some(metrics) = &self.metrics {
+            metrics.record_packet_error();
         }
     }
 
@@ -63,25 +79,34 @@ impl<D: TunnelDevice> PlainTunnel<D> {
     ///
     /// Returns a device, protocol, or transport error when any stage fails.
     pub fn send_next(&mut self) -> Result<usize, TunnelError> {
-        let mut payload = vec![0; self.device.mtu()];
-        let length = self.device.read_packet(&mut payload)?;
-        payload.truncate(length);
-        let header = TunnelHeader {
-            version: PROTOCOL_VERSION,
-            packet_type: PacketType::TransportData,
-            flags: 0,
-            session_id: self.session_id,
-            sequence_number: SequenceNumber(self.next_sequence),
-            key_generation: crate::KeyGeneration(0),
-        };
-        let packet = TunnelPacket::new(header, payload)?;
-        let encoded = packet.encode()?;
-        let sent = self.transport.send(&encoded)?;
-        self.next_sequence = self
-            .next_sequence
-            .checked_add(1)
-            .ok_or(TunnelError::SequenceExhausted)?;
-        Ok(sent)
+        let result = (|| {
+            let mut payload = vec![0; self.device.mtu()];
+            let length = self.device.read_packet(&mut payload)?;
+            payload.truncate(length);
+            let header = TunnelHeader {
+                version: PROTOCOL_VERSION,
+                packet_type: PacketType::TransportData,
+                flags: 0,
+                session_id: self.session_id,
+                sequence_number: SequenceNumber(self.next_sequence),
+                key_generation: crate::KeyGeneration(0),
+            };
+            let packet = TunnelPacket::new(header, payload)?;
+            let encoded = packet.encode()?;
+            let sent = self.transport.send(&encoded)?;
+            self.next_sequence = self
+                .next_sequence
+                .checked_add(1)
+                .ok_or(TunnelError::SequenceExhausted)?;
+            if let Some(metrics) = &self.metrics {
+                metrics.record_tx(sent as u64);
+            }
+            Ok(sent)
+        })();
+        if result.is_err() {
+            self.record_packet_error();
+        }
+        result
     }
 
     /// Receives one datagram, validates its session and type, and writes its payload.
@@ -91,26 +116,36 @@ impl<D: TunnelDevice> PlainTunnel<D> {
     /// Returns a device, protocol, or transport error, or rejects an unexpected
     /// session and packet type without writing to the device.
     pub fn receive_next(&mut self) -> Result<usize, TunnelError> {
-        let mut encoded = vec![0; MAX_PACKET_SIZE];
-        let (length, _) = self.transport.receive(&mut encoded)?;
-        let packet = TunnelPacket::decode(&encoded[..length])?;
-        if packet.header.session_id != self.session_id {
-            return Err(TunnelError::UnexpectedSession {
-                expected: self.session_id,
-                actual: packet.header.session_id,
-            });
+        let result = (|| {
+            let mut encoded = vec![0; MAX_PACKET_SIZE];
+            let (length, _) = self.transport.receive(&mut encoded)?;
+            let packet = TunnelPacket::decode(&encoded[..length])?;
+            if packet.header.session_id != self.session_id {
+                return Err(TunnelError::UnexpectedSession {
+                    expected: self.session_id,
+                    actual: packet.header.session_id,
+                });
+            }
+            if packet.header.packet_type != PacketType::TransportData {
+                return Err(TunnelError::UnexpectedPacketType(packet.header.packet_type));
+            }
+            let written = self.device.write_packet(&packet.payload)?;
+            if let Some(metrics) = &self.metrics {
+                metrics.record_rx(length as u64);
+            }
+            Ok(written)
+        })();
+        if result.is_err() {
+            self.record_packet_error();
         }
-        if packet.header.packet_type != PacketType::TransportData {
-            return Err(TunnelError::UnexpectedPacketType(packet.header.packet_type));
-        }
-        Ok(self.device.write_packet(&packet.payload)?)
+        result
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::{PlainTunnel, TunnelError};
-    use crate::{MemoryDevice, SessionId, TunnelDevice, UdpTransport};
+    use crate::{MemoryDevice, Metrics, SessionId, TunnelDevice, UdpTransport};
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::time::Duration;
 
@@ -130,12 +165,18 @@ mod tests {
         let client_address = client_transport.local_addr().expect("client address");
         let server_address = server_transport.local_addr().expect("server address");
         let session = SessionId::new(7).expect("session ID");
+        let client_metrics = Metrics::default();
+        let server_metrics = Metrics::default();
         let mut client = PlainTunnel::new(client_device, client_transport, session);
-        let mut server = PlainTunnel::new(server_device, server_transport, session);
+        let mut server = PlainTunnel::new(server_device, server_transport, session)
+            .with_metrics(server_metrics.clone());
+        client = client.with_metrics(client_metrics.clone());
         client.transport.set_remote(server_address);
         server.transport.set_remote(client_address);
         client.send_next().expect("client sends");
         server.receive_next().expect("server receives");
+        assert_eq!(client_metrics.snapshot().tx_packets, 1);
+        assert_eq!(server_metrics.snapshot().rx_packets, 1);
         let mut received = [0; 1_400];
         assert_eq!(client_application.read_packet(&mut received), Ok(12));
         assert_eq!(&received[..12], b"inner packet");

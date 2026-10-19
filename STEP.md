@@ -607,7 +607,7 @@ Device Interface
 - [x] UDP 수신 데이터그램을 Protocol Decoder에 전달
 - [x] Protocol Encoder 결과를 UDP로 송신
 - [ ] 불필요한 버퍼 복사 최소화
-- [ ] 패킷 처리 실패 통계 기록
+- [x] 패킷 처리 실패 통계 기록
 - [ ] 세션별 Endpoint 매핑
 - [ ] 수신 루프와 송신 루프의 종료 신호 정의
 

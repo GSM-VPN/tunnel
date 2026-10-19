@@ -76,6 +76,12 @@ to query a stopped or unhealthy Core and uses consecutive request IDs for the
 two IPC calls. The snapshot contains no keys, plaintext packets, DNS query
 contents, or per-user identity data.
 
+`PlainTunnel` and `EncryptedTunnel` accept an optional `Metrics` value through
+`with_metrics`. Successful data-plane sends and receives update packet/byte
+counters, while device, transport, codec, authentication, inner-packet, and
+session-type failures increment `packet_errors`. The metrics object stores only
+atomic counters and never retains the failed datagram or its plaintext.
+
 VPN Server 승인 연동은 [`vpn-server-integration.md`](./vpn-server-integration.md)의
 경계를 따른다. Controller는 Gateway/VPN Server의 정규화된 승인 정보와
 HMAC 서명만 받고, 로그인 API나 `GATEWAY_SHARED_SECRET` 원문을 Rust Core에
