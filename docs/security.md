@@ -38,10 +38,11 @@ neither value belongs in logs, metrics, or management payloads.
 verifier. It is not passed to Core, used for tunnel packet encryption, or used
 as input to Noise static-key or server-public-key derivation.
 
-`ServerIdentity` loads `SERVER_PRIVATE_KEY` as exactly 32 bytes of hex inside
-Rust Core and derives the X25519 public key deterministically. Its debug output
-redacts the private key, and the Noise responder can consume the key only
-through this identity boundary. The Go Controller must keep
+`ServerIdentity` loads `SERVER_PRIVATE_KEY` as the canonical 32-byte standard
+Base64 format used by `vpn-server` inside Rust Core and derives the X25519 public
+key deterministically. The public key is exposed in the same Base64
+representation for pinning. Its debug output redacts the private key, and the
+Noise responder can consume the key only through this identity boundary. The Go Controller must keep
 `GATEWAY_SHARED_SECRET` in its own service-authentication boundary and never
 include it in Core IPC payloads.
 The Core validates `SERVER_PRIVATE_KEY` before binding its management socket;

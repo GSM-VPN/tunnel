@@ -89,7 +89,7 @@ Offset  Size  Field
 - [x] 서버 공개키는 `SERVER_PRIVATE_KEY`에서 결정적으로 파생
 - [x] 클라이언트는 파생된 서버 공개키를 사전에 신뢰하거나 Gateway/VPN Server의 승인 정보로 전달받아 검증
 - [x] `SERVER_PRIVATE_KEY`는 Gateway Secret과 별도로 보관
-- [ ] `SERVER_PRIVATE_KEY`와 파생된 공개키의 형식·인코딩을 `vpn-server`와 동일하게 유지
+- [x] `SERVER_PRIVATE_KEY`와 파생된 공개키의 형식·인코딩을 `vpn-server`와 동일하게 유지
 - [x] 키 로딩 실패 또는 공개키 파생 실패 시 Tunnel Server를 시작하지 않음
 - [x] 두 비밀값 모두 로그·IPC 상태 조회·메트릭에 노출하지 않음
 - [x] 비밀값은 환경 변수 또는 기존 `vpn-server`의 비밀값 공급 방식을 사용

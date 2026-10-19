@@ -16,6 +16,7 @@ path = "src/tunnel_core_bin.rs"
 workspace = true
 
 [dependencies]
+base64 = "0.22"
 chacha20poly1305 = "0.10"
 getrandom = "0.3"
 sha2 = "0.10"

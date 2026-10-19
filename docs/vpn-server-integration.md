@@ -50,8 +50,9 @@ IPC payload에 복사하지 않는다. 서명 실패는 승인 정보 검증 전
 
 `GATEWAY_SHARED_SECRET`의 공급은 기존 Gateway/VPN Server 서비스 인증 설정이
 담당하며, Controller는 초기화 시 전달받은 값으로 검증기만 구성한다. 반면
-`SERVER_PRIVATE_KEY`는 Rust Core 프로세스의 `SERVER_PRIVATE_KEY` 환경 변수로
-공급되어 Core identity 경계에서만 파싱된다. 두 값 모두 설정 파일, IPC,
+`SERVER_PRIVATE_KEY`는 기존 `vpn-server`와 동일하게 32바이트 표준 Base64로
+저장·공급하며 Rust Core 프로세스의 환경 변수 경계에서만 파싱된다. 파생된
+서버 공개키도 32바이트 표준 Base64로 표현한다. 두 값 모두 설정 파일, IPC,
 상태 조회, 메트릭으로 우회 공급하지 않는다.
 
 ## 현재 범위와 후속 연동
