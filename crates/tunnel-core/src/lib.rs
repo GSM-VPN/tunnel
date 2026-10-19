@@ -53,7 +53,8 @@ pub use protocol::{
     SessionId, SessionState,
 };
 pub use session::{
-    LifecycleState, SessionError, SessionEvent, SessionMachine, SessionPolicy, Transition,
+    IdleAction, LifecycleState, SessionError, SessionEvent, SessionMachine, SessionPolicy,
+    Transition,
 };
 pub use session_table::{SessionTable, SessionTableError};
 pub use transport::{TransportError, UdpTransport};
