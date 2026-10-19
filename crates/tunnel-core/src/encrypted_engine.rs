@@ -64,6 +64,7 @@ pub struct EncryptedTunnel<D> {
     rotation_policy: KeyRotationPolicy,
     inner_packet_mtu: usize,
     dual_stack: bool,
+    metrics: Option<crate::Metrics>,
 }
 
 impl<D: TunnelDevice> EncryptedTunnel<D> {
@@ -107,6 +108,20 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
             rotation_policy,
             inner_packet_mtu,
             dual_stack: true,
+            metrics: None,
+        }
+    }
+
+    /// Attaches optional secret-free counters to this tunnel.
+    #[must_use]
+    pub fn with_metrics(mut self, metrics: crate::Metrics) -> Self {
+        self.metrics = Some(metrics);
+        self
+    }
+
+    fn record_packet_error(&self) {
+        if let Some(metrics) = &self.metrics {
+            metrics.record_packet_error();
         }
     }
 
@@ -191,33 +206,42 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
     ///
     /// Returns a device, encryption, protocol, or transport error.
     pub fn send_next(&mut self) -> Result<usize, EncryptedTunnelError> {
-        self.ensure_rotation_window()?;
-        let mut payload = vec![0; self.device.mtu()];
-        let length = self.device.read_packet(&mut payload)?;
-        payload.truncate(length);
-        validate_inner_ip_packet(&payload, self.inner_packet_mtu, self.dual_stack)?;
-        let next_sequence = self
-            .next_sequence
-            .checked_add(1)
-            .ok_or(EncryptedTunnelError::SequenceExhausted)?;
-        let next_transmitted_bytes = self
-            .transmitted_bytes
-            .checked_add(length as u64)
-            .ok_or(EncryptedTunnelError::SequenceExhausted)?;
-        let header = TunnelHeader {
-            version: PROTOCOL_VERSION,
-            packet_type: PacketType::TransportData,
-            flags: 0,
-            session_id: self.session_id,
-            sequence_number: SequenceNumber(self.next_sequence),
-            key_generation: self.sender.key_generation(),
-        };
-        let packet = self.sender.seal(header, &payload)?;
-        let encoded = packet.encode()?;
-        let sent = self.transport.send(&encoded)?;
-        self.next_sequence = next_sequence;
-        self.transmitted_bytes = next_transmitted_bytes;
-        Ok(sent)
+        let result = (|| {
+            self.ensure_rotation_window()?;
+            let mut payload = vec![0; self.device.mtu()];
+            let length = self.device.read_packet(&mut payload)?;
+            payload.truncate(length);
+            validate_inner_ip_packet(&payload, self.inner_packet_mtu, self.dual_stack)?;
+            let next_sequence = self
+                .next_sequence
+                .checked_add(1)
+                .ok_or(EncryptedTunnelError::SequenceExhausted)?;
+            let next_transmitted_bytes = self
+                .transmitted_bytes
+                .checked_add(length as u64)
+                .ok_or(EncryptedTunnelError::SequenceExhausted)?;
+            let header = TunnelHeader {
+                version: PROTOCOL_VERSION,
+                packet_type: PacketType::TransportData,
+                flags: 0,
+                session_id: self.session_id,
+                sequence_number: SequenceNumber(self.next_sequence),
+                key_generation: self.sender.key_generation(),
+            };
+            let packet = self.sender.seal(header, &payload)?;
+            let encoded = packet.encode()?;
+            let sent = self.transport.send(&encoded)?;
+            self.next_sequence = next_sequence;
+            self.transmitted_bytes = next_transmitted_bytes;
+            if let Some(metrics) = &self.metrics {
+                metrics.record_tx(sent as u64);
+            }
+            Ok(sent)
+        })();
+        if result.is_err() {
+            self.record_packet_error();
+        }
+        result
     }
 
     /// Sends an authenticated keepalive without touching the tunnel device.
@@ -252,18 +276,28 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
     /// Returns a device, protocol, encryption, or transport error. Failed
     /// authentication never writes plaintext to the device.
     pub fn receive_next(&mut self) -> Result<usize, EncryptedTunnelError> {
-        let mut encoded = vec![0; MAX_PACKET_SIZE];
-        let (length, _) = self.transport.receive(&mut encoded)?;
-        let packet = TunnelPacket::decode(&encoded[..length])?;
-        let plaintext = self.receiver.open(&packet)?;
-        match packet.header.packet_type {
-            PacketType::TransportData => {
-                validate_inner_ip_packet(&plaintext, self.inner_packet_mtu, self.dual_stack)?;
-                Ok(self.device.write_packet(&plaintext)?)
+        let result = (|| {
+            let mut encoded = vec![0; MAX_PACKET_SIZE];
+            let (length, _) = self.transport.receive(&mut encoded)?;
+            let packet = TunnelPacket::decode(&encoded[..length])?;
+            let plaintext = self.receiver.open(&packet)?;
+            match packet.header.packet_type {
+                PacketType::TransportData => {
+                    validate_inner_ip_packet(&plaintext, self.inner_packet_mtu, self.dual_stack)?;
+                    let written = self.device.write_packet(&plaintext)?;
+                    if let Some(metrics) = &self.metrics {
+                        metrics.record_rx(written as u64);
+                    }
+                    Ok(written)
+                }
+                PacketType::Keepalive => Ok(0),
+                packet_type => Err(EncryptedTunnelError::UnexpectedPacketType(packet_type)),
             }
-            PacketType::Keepalive => Ok(0),
-            packet_type => Err(EncryptedTunnelError::UnexpectedPacketType(packet_type)),
+        })();
+        if result.is_err() {
+            self.record_packet_error();
         }
+        result
     }
 }
 
@@ -271,8 +305,8 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
 mod tests {
     use super::EncryptedTunnel;
     use crate::{
-        DeviceError, KeyGeneration, KeyRotationPolicy, MemoryDevice, RotationReason, SessionCipher,
-        SessionId, TunnelDevice, UdpTransport, ipv4_header_checksum,
+        DeviceError, KeyGeneration, KeyRotationPolicy, MemoryDevice, Metrics, RotationReason,
+        SessionCipher, SessionId, TunnelDevice, UdpTransport, ipv4_header_checksum,
     };
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
@@ -310,24 +344,30 @@ mod tests {
         let server_address = server_transport.local_addr().expect("server address");
         let sender = SessionCipher::new(key, session, KeyGeneration(0), 1);
         let receiver_cipher = SessionCipher::new(key, session, KeyGeneration(0), 1);
+        let client_metrics = Metrics::default();
+        let server_metrics = Metrics::default();
         let mut client = EncryptedTunnel::new(
             client_device,
             client_transport,
             sender,
             SessionCipher::new(key, session, KeyGeneration(0), 2),
             session,
-        );
+        )
+        .with_metrics(client_metrics.clone());
         let mut server = EncryptedTunnel::new(
             server_device,
             server_transport,
             SessionCipher::new(key, session, KeyGeneration(0), 2),
             receiver_cipher,
             session,
-        );
+        )
+        .with_metrics(server_metrics.clone());
         client.transport.set_remote(server_address);
         server.transport.set_remote(client_address);
         client.send_next().expect("packet sends");
         server.receive_next().expect("packet receives");
+        assert_eq!(client_metrics.snapshot().tx_packets, 1);
+        assert_eq!(server_metrics.snapshot().rx_packets, 1);
         let mut output = [0; 1_400];
         assert_eq!(client_application.read_packet(&mut output), Ok(36));
         assert_eq!(&output[..36], packet);
