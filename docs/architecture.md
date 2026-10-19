@@ -11,8 +11,9 @@ Go Controller ── Unix Domain Socket ── Rust tunnel-core
 
 The Rust core owns packet validation, encryption, replay protection, device
 I/O, UDP transport, session state, and management-frame decoding. The Go
-controller owns process lifecycle, management requests, restart policy, and
-operational integration. User IP packets never pass through Go IPC.
+controller owns process lifecycle through CoreController, management requests,
+bounded restart policy, and operational integration. User IP packets never
+pass through Go IPC.
 
 The current implementation is a research/development core. A Noise handshake,
 VPN-server integration, routing/NAT setup, and production authorization
@@ -30,4 +31,6 @@ without writing to the device.
 
 `SessionMachine` bounds reconnect attempts and applies 1–60 second exponential
 backoff. Authentication failure and permission revocation enter the closing
-path and do not retry automatically.
+path and do not retry automatically. CoreController exposes the child
+STARTING/RUNNING/STOPPING/STOPPED/UNHEALTHY state and stops retrying after the
+configured restart limit.
