@@ -131,7 +131,7 @@ impl<D: TunnelDevice> PlainTunnel<D> {
             }
             let written = self.device.write_packet(&packet.payload)?;
             if let Some(metrics) = &self.metrics {
-                metrics.record_rx(written as u64);
+                metrics.record_rx(length as u64);
             }
             Ok(written)
         })();

@@ -286,7 +286,7 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
                     validate_inner_ip_packet(&plaintext, self.inner_packet_mtu, self.dual_stack)?;
                     let written = self.device.write_packet(&plaintext)?;
                     if let Some(metrics) = &self.metrics {
-                        metrics.record_rx(written as u64);
+                        metrics.record_rx(length as u64);
                     }
                     Ok(written)
                 }
