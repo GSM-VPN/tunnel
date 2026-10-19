@@ -1,5 +1,9 @@
 //! Versioned control-plane IPC frames shared with the Go controller.
 
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use crate::{Metrics, PeerAuthorization, PeerRegistry, PeerRegistryError};
+
 const FRAME_PREFIX: usize = 4;
 const REQUEST_HEADER: usize = 2 + 8 + 2 + 4;
 const RESPONSE_HEADER: usize = 2 + 8 + 2 + 2 + 4;
@@ -20,6 +24,11 @@ pub const OPERATION_LIST_SESSIONS: u16 = 9;
 pub const OPERATION_GET_STATISTICS: u16 = 10;
 pub const OPERATION_UPDATE_CONFIGURATION: u16 = 11;
 pub const OPERATION_GET_HEALTH: u16 = 12;
+pub const STATUS_OK: u16 = 200;
+pub const STATUS_BAD_REQUEST: u16 = 400;
+pub const STATUS_NOT_FOUND: u16 = 404;
+pub const STATUS_CONFLICT: u16 = 409;
+pub const STATUS_NOT_IMPLEMENTED: u16 = 501;
 
 fn is_known_operation(operation: u16) -> bool {
     (OPERATION_INITIALIZE..=OPERATION_GET_HEALTH).contains(&operation)
@@ -40,6 +49,109 @@ pub struct ManagementResponse {
     pub status: u16,
     pub error_code: u16,
     pub payload: Vec<u8>,
+}
+
+/// Rust Core control-plane state owned by the management server.
+pub struct ManagementService {
+    peers: PeerRegistry,
+    metrics: Metrics,
+}
+
+impl ManagementService {
+    /// Creates a service with a bounded approved-peer registry.
+    #[must_use]
+    pub fn new(max_peers: usize, metrics: Metrics) -> Self {
+        Self {
+            peers: PeerRegistry::new(max_peers),
+            metrics,
+        }
+    }
+
+    /// Dispatches one decoded control-plane request.
+    #[must_use]
+    pub fn handle(&mut self, request: &ManagementRequest, now: SystemTime) -> ManagementResponse {
+        let (status, error_code, payload) = match request.operation {
+            OPERATION_REGISTER_PEER => match decode_peer_registration(&request.payload) {
+                Ok(peer) => match self.register_peer(peer, now) {
+                    Ok(()) => (STATUS_OK, 0, Vec::new()),
+                    Err(error) => (status_for_peer_error(&error), 1, Vec::new()),
+                },
+                Err(_) => (STATUS_BAD_REQUEST, 1, Vec::new()),
+            },
+            OPERATION_REMOVE_PEER => match decode_peer_removal(&request.payload)
+                .map_err(|_| STATUS_BAD_REQUEST)
+                .and_then(|peer_id| {
+                    self.peers
+                        .revoke(peer_id)
+                        .map(|_| ())
+                        .map_err(|_| STATUS_NOT_FOUND)
+                }) {
+                Ok(()) => (STATUS_OK, 0, Vec::new()),
+                Err(status) => (status, 2, Vec::new()),
+            },
+            OPERATION_GET_HEALTH => (STATUS_OK, 0, b"healthy".to_vec()),
+            OPERATION_GET_STATISTICS => (STATUS_OK, 0, encode_metrics(&self.metrics)),
+            _ => (STATUS_NOT_IMPLEMENTED, 3, Vec::new()),
+        };
+        ManagementResponse {
+            version: request.version,
+            request_id: request.request_id,
+            status,
+            error_code,
+            payload,
+        }
+    }
+
+    fn register_peer(
+        &mut self,
+        peer: PeerRegistrationPayload,
+        now: SystemTime,
+    ) -> Result<(), PeerRegistryError> {
+        let expires_at = UNIX_EPOCH
+            .checked_add(Duration::from_secs(peer.expires_at_unix))
+            .ok_or(PeerRegistryError::InvalidExpiry)?;
+        self.peers.register(
+            PeerAuthorization {
+                peer_id: peer.peer_id,
+                user_id: peer.user_id,
+                public_key: peer.public_key,
+                ipv4: peer.ipv4.map(std::net::Ipv4Addr::from),
+                ipv6: peer.ipv6.map(std::net::Ipv6Addr::from),
+                expires_at,
+            },
+            now,
+        )
+    }
+}
+
+fn status_for_peer_error(error: &PeerRegistryError) -> u16 {
+    match error {
+        PeerRegistryError::DuplicatePeer | PeerRegistryError::Capacity => STATUS_CONFLICT,
+        PeerRegistryError::UnknownPeer => STATUS_NOT_FOUND,
+        PeerRegistryError::EmptyUserId
+        | PeerRegistryError::InvalidAddress
+        | PeerRegistryError::InvalidExpiry => STATUS_BAD_REQUEST,
+    }
+}
+
+fn encode_metrics(metrics: &Metrics) -> Vec<u8> {
+    let snapshot = metrics.snapshot();
+    [
+        snapshot.active_sessions,
+        snapshot.tx_bytes,
+        snapshot.rx_bytes,
+        snapshot.tx_packets,
+        snapshot.rx_packets,
+        snapshot.authentication_failures,
+        snapshot.replay_rejections,
+        snapshot.reconnects,
+        snapshot.handshake_failures,
+        snapshot.keepalive_failures,
+        snapshot.packet_errors,
+    ]
+    .into_iter()
+    .flat_map(u64::to_be_bytes)
+    .collect()
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -223,6 +335,9 @@ impl ManagementRequest {
             operation: read_u16(frame, 14)?,
             payload: frame.get(20..).ok_or(ManagementError::Truncated)?.to_vec(),
         };
+        if request.version == 0 {
+            return Err(ManagementError::ZeroVersion);
+        }
         if !is_known_operation(request.operation) {
             return Err(ManagementError::UnknownOperation);
         }
@@ -265,13 +380,17 @@ impl ManagementResponse {
         if payload_len != frame.len() - FRAME_PREFIX - RESPONSE_HEADER {
             return Err(ManagementError::LengthMismatch);
         }
-        Ok(Self {
+        let response = Self {
             version: read_u16(frame, 4)?,
             request_id: read_u64(frame, 6)?,
             status: read_u16(frame, 14)?,
             error_code: read_u16(frame, 16)?,
             payload: frame.get(22..).ok_or(ManagementError::Truncated)?.to_vec(),
-        })
+        };
+        if response.version == 0 {
+            return Err(ManagementError::ZeroVersion);
+        }
+        Ok(response)
     }
 }
 
@@ -394,6 +513,21 @@ mod tests {
             payload: Vec::new(),
         };
         assert_eq!(unknown.encode(), Err(ManagementError::UnknownOperation));
+
+        let encoded = ManagementRequest {
+            version: 1,
+            request_id: 1,
+            operation: OPERATION_GET_HEALTH,
+            payload: Vec::new(),
+        }
+        .encode()
+        .unwrap();
+        let mut zero_version = encoded;
+        zero_version[4..6].copy_from_slice(&0_u16.to_be_bytes());
+        assert_eq!(
+            ManagementRequest::decode(&zero_version),
+            Err(ManagementError::ZeroVersion)
+        );
     }
 
     #[test]
