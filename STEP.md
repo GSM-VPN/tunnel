@@ -372,11 +372,11 @@ Windows/Wintun
 - [x] VPN 내부 IPv4 대역 결정
 - [x] 서버 UDP 포트 결정
 - [x] 기본 터널 MTU 결정
-- [ ] DNS Resolver 운영 방식 결정
+- [x] DNS Resolver 운영 방식 결정
 - [x] IPv6 초기 정책 결정
 - [x] IPC 메시지 포맷 결정
 - [x] IPC 요청·응답 오류 코드 결정
-- [ ] 엔진과 VPN Server의 프로세스 권한 결정
+- [x] 엔진과 VPN Server의 프로세스 권한 결정
 - [x] Unix Domain Socket 사용 여부 결정
 - [x] 로그에 포함할 수 있는 정보와 금지할 정보 결정
 

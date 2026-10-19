@@ -93,6 +93,20 @@ kept by the Gateway/VPN service-authentication layer, while
 parsed directly into the protected `ServerIdentity`. Neither value is stored
 in a settings file, sent through IPC, or included in status and metrics.
 
+## 운영 권한과 DNS 정책
+
+초기 DNS 정책은 `DnsPolicy`의 순서가 지정된 upstream 목록을 사용하고,
+Linux 적용 계층에서는 `resolvectl`의 UDP/TCP 53 transport만 실행한다. DoT와
+DoH는 설정 모델에 보존할 수 있지만 별도 resolver adapter가 준비되기 전에는
+활성화하지 않는다. 적용 전 `DnsSnapshot`을 보관하고 연결 종료나 실패 시
+원래 link·resolver 설정을 역순으로 복원한다.
+
+운영 배포에서는 VPN Server/Go Controller와 Rust Core를 전용 서비스 계정으로
+실행하고, TUN·routing·nftables처럼 `CAP_NET_ADMIN`이 필요한 작업은 좁은
+권한의 privileged adapter 경계에서만 수행한다. Rust Core의 Unix socket은
+소유자 전용 `0600`으로 유지하며, 라이브러리는 서비스 계정 생성이나 host
+권한 변경을 자동 수행하지 않는다.
+
 ## Go Controller 운영 로그
 
 Controller의 운영 로그는 `log/slog` 구조화 이벤트로 기록한다. 기본 logger는
