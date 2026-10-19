@@ -81,6 +81,21 @@ VPN Server 승인 연동은 [`vpn-server-integration.md`](./vpn-server-integrati
 HMAC 서명만 받고, 로그인 API나 `GATEWAY_SHARED_SECRET` 원문을 Rust Core에
 전달하지 않는다.
 
+## Go Controller 운영 로그
+
+Controller의 운영 로그는 `log/slog` 구조화 이벤트로 기록한다. 기본 logger는
+`io.Discard`를 사용하므로 애플리케이션이 `SetLogger`로 명시적으로 주입한
+경우에만 출력된다. 현재 이벤트는 다음 생명주기 정보만 포함한다.
+
+- `core_start_requested`, `core_start_attempt`, `core_running`
+- `core_start_failed`, `core_state_sync_failed`
+- `core_stop_completed`, `core_state_changed`
+
+이벤트 필드는 상태 이름, 시작 횟수, 성공 여부처럼 운영에 필요한 메타데이터로
+제한한다. 명령행, 소켓 경로, Peer 정보, 키, 평문·암호문 패킷, 원문 오류 문자열은
+Controller가 로그 필드로 전달하지 않는다. 로그 저장소를 연결할 때도 동일한
+비밀정보 금지 정책을 유지해야 한다.
+
 프로토콜·암호화·네트워크 기능은 각 단계의 테스트 요구사항을 충족하기 전까지 실제 사용자 트래픽에 사용하지 않습니다.
 
 ## 테스트 범위
