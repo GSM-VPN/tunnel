@@ -64,16 +64,16 @@ Offset  Size  Field
 
 - [x] Noise Protocol Framework 기반 핸드셰이크 사용
 - [x] 핸드셰이크 패턴: `Noise_IK`
-- [ ] `Noise_IK` 구현체의 패턴 의미와 서버·클라이언트 신원 모델 검증
-- [ ] 키 교환: X25519
-- [ ] 키 파생: HKDF-SHA-256
-- [ ] 데이터 암호화: ChaCha20-Poly1305
+- [x] `Noise_IK` 구현체의 패턴 의미와 서버·클라이언트 신원 모델 검증
+- [x] 키 교환: X25519
+- [x] 키 파생: HKDF-SHA-256
+- [x] 데이터 암호화: ChaCha20-Poly1305
 - [ ] 난수: 운영체제 CSPRNG
-- [ ] 송신 키와 수신 키 분리
-- [ ] 세션별 키와 키 세대 분리
-- [ ] Nonce는 키 세대별 단조 증가 카운터에서 파생
-- [ ] 카운터 재사용 및 오버플로 발생 시 세션 종료
-- [ ] Replay Window 기본 크기: 2,048 packets
+- [x] 송신 키와 수신 키 분리
+- [x] 세션별 키와 키 세대 분리
+- [x] Nonce는 키 세대별 단조 증가 카운터에서 파생
+- [x] 카운터 재사용 및 오버플로 발생 시 세션 종료
+- [x] Replay Window 기본 크기: 2,048 packets
 - [ ] 키 갱신: 1시간 또는 방향별 1GiB 전송 중 먼저 도달하는 조건
 - [ ] 키 갱신 실패 시 세션을 안전하게 종료
 - [ ] 키·평문 패킷·암호문을 로그에 기록하지 않음
@@ -85,10 +85,10 @@ Offset  Size  Field
 - [ ] `GATEWAY_SHARED_SECRET`는 Gateway와 VPN Server/Controller 사이의 서비스·제어 평면 인증에 사용
 - [ ] `GATEWAY_SHARED_SECRET`는 Tunnel 데이터 패킷 암호화 키로 사용하지 않음
 - [ ] `GATEWAY_SHARED_SECRET`는 Noise 정적 키 또는 서버 공개키 파생에 재사용하지 않음
-- [ ] `SERVER_PRIVATE_KEY`는 Tunnel Server의 장기 개인키로 사용
-- [ ] 서버 공개키는 `SERVER_PRIVATE_KEY`에서 결정적으로 파생
-- [ ] 클라이언트는 파생된 서버 공개키를 사전에 신뢰하거나 Gateway/VPN Server의 승인 정보로 전달받아 검증
-- [ ] `SERVER_PRIVATE_KEY`는 Gateway Secret과 별도로 보관
+- [x] `SERVER_PRIVATE_KEY`는 Tunnel Server의 장기 개인키로 사용
+- [x] 서버 공개키는 `SERVER_PRIVATE_KEY`에서 결정적으로 파생
+- [x] 클라이언트는 파생된 서버 공개키를 사전에 신뢰하거나 Gateway/VPN Server의 승인 정보로 전달받아 검증
+- [x] `SERVER_PRIVATE_KEY`는 Gateway Secret과 별도로 보관
 - [ ] `SERVER_PRIVATE_KEY`와 파생된 공개키의 형식·인코딩을 `vpn-server`와 동일하게 유지
 - [ ] 키 로딩 실패 또는 공개키 파생 실패 시 Tunnel Server를 시작하지 않음
 - [ ] 두 비밀값 모두 로그·IPC 상태 조회·메트릭에 노출하지 않음
