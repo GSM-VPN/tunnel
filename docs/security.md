@@ -29,6 +29,8 @@ redacts the private key, and the Noise responder can consume the key only
 through this identity boundary. The Go Controller must keep
 `GATEWAY_SHARED_SECRET` in its own service-authentication boundary and never
 include it in Core IPC payloads.
+The Core validates `SERVER_PRIVATE_KEY` before binding its management socket;
+a missing or malformed key prevents startup.
 
 ## Known gaps
 

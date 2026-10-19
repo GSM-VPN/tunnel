@@ -2,6 +2,12 @@
 
 #[cfg(unix)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _server_identity = tunnel_core::ServerIdentity::from_env().map_err(|error| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("invalid SERVER_PRIVATE_KEY: {error:?}"),
+        )
+    })?;
     let socket_path = std::env::var("TUNNEL_CORE_IPC_SOCKET")
         .unwrap_or_else(|_| "/tmp/gsm-tunnel-core.sock".to_owned());
     let max_peers = std::env::var("TUNNEL_CORE_MAX_PEERS")
