@@ -146,3 +146,8 @@ The management configuration reserves payload byte 8 for the explicit NAT66
 policy. When enabled with dual-stack mode, `LinuxNetworkPlan` emits an IPv6
 MASQUERADE rule; the default remains disabled so routed IPv6 can be selected
 without silently applying NAT.
+
+UDP 장애 정책은 [`udp-failure-policy.md`](./udp-failure-policy.md)에 따른다.
+데이터그램 손실은 무한 재전송하지 않고 세션 타임아웃·제한된 재연결로
+처리하며, 중복·재정렬은 키 세대별 Replay Window가 결정한다. Core 재시작은
+승인 상태만 복원하고 이전 세션 키와 카운터는 복원하지 않는다.

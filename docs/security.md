@@ -87,6 +87,12 @@ managed session table by the configured peer capacity (216 by default).
 Expired approvals are purged at the start of each management request, releasing
 their addresses and closing any associated sessions before the request runs.
 
+UDP loss and reordering do not weaken the cryptographic boundary: the
+per-generation Replay Window rejects duplicates and stale sequences, while
+authenticated packets that arrive within the window may be processed out of
+order. A Core restart never restores session keys, counters, or replay state;
+the peer must complete a new authenticated handshake.
+
 The Unix management socket is a local-only control boundary. The deployment
 service account owns the socket, the file mode is restricted to `0600`, and
 Linux clients are accepted only when `SO_PEERCRED` reports the same UID as the
