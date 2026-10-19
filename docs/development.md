@@ -100,6 +100,11 @@ adapter. A failed query advances to the next provider and wraps around after
 the last one; a successful query keeps the current provider selected. The
 selector stores no query names, response bodies, or user-specific history.
 
+`PeerRateLimiter` owns an independent bounded window per peer. Exhausting one
+peer's packet allowance does not consume another peer's allowance; the shared
+server queue and end-to-end fairness under load still require OS/network
+integration measurements.
+
 Secret configuration follows a separate boundary: `GATEWAY_SHARED_SECRET` is
 kept by the Gateway/VPN service-authentication layer, while
 `SERVER_PRIVATE_KEY` is supplied to Rust Core through its environment and is
