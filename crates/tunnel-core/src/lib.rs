@@ -1,5 +1,6 @@
 //! Foundational types and codecs for the GSM Tunnel data plane.
 
+mod address_pool;
 mod codec;
 mod crypto;
 mod device;
@@ -23,6 +24,7 @@ mod network;
 mod noise;
 mod peer;
 
+pub use address_pool::{AddressPoolError, ClientAddressPool, ClientAddresses};
 pub use codec::{TunnelHeader, TunnelPacket};
 pub use crypto::{CryptoError, ReplayWindow, SessionCipher};
 pub use device::{DeviceError, MemoryDevice, TunnelDevice};
