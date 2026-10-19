@@ -7,7 +7,10 @@ use std::{
     time::SystemTime,
 };
 
+use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
+
+const IPC_IO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 use crate::{MAX_MANAGEMENT_FRAME_SIZE, ManagementRequest, ManagementService};
 
@@ -32,6 +35,7 @@ impl UnixManagementServer {
             Err(error) => return Err(error),
         }
         let listener = UnixListener::bind(&socket_path)?;
+        std::fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o600))?;
         Ok(Self {
             listener,
             socket_path,
@@ -47,6 +51,8 @@ impl UnixManagementServer {
     /// rejected by closing only the current connection.
     pub fn serve_once(&mut self) -> io::Result<()> {
         let (mut stream, _) = self.listener.accept()?;
+        stream.set_read_timeout(Some(IPC_IO_TIMEOUT))?;
+        stream.set_write_timeout(Some(IPC_IO_TIMEOUT))?;
         let Ok(frame) = read_frame(&mut stream) else {
             return Ok(());
         };
@@ -85,6 +91,7 @@ fn read_frame(stream: &mut UnixStream) -> io::Result<Vec<u8>> {
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::fs::PermissionsExt;
     use std::{
         io::{Read, Write},
         os::unix::net::UnixStream,
@@ -100,6 +107,10 @@ mod tests {
         let mut server =
             UnixManagementServer::bind(&path, ManagementService::new(4, Metrics::default()))
                 .unwrap();
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         let handle = std::thread::spawn(move || server.serve_once());
         let mut client = UnixStream::connect(&path).unwrap();
         let request = ManagementRequest {
