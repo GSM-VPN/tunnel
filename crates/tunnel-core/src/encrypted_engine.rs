@@ -128,6 +128,22 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
         self.sender.key_generation()
     }
 
+    /// Closes the device and transport, then consumes the tunnel state.
+    ///
+    /// Consuming the tunnel ensures that session ciphers and their key
+    /// material are dropped together with sequence and byte counters after
+    /// the endpoints have been closed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a device error when the device cannot be closed. The UDP
+    /// transport is closed even when the device reports an error.
+    pub fn close(mut self) -> Result<(), EncryptedTunnelError> {
+        let device_result = self.device.close();
+        self.transport.close();
+        device_result.map_err(EncryptedTunnelError::from)
+    }
+
     /// Installs new directional keys from an authenticated re-handshake.
     ///
     /// The sender and receiver must move to the same strictly newer
@@ -344,6 +360,28 @@ mod tests {
             tunnel.send_next(),
             Err(super::EncryptedTunnelError::InvalidInnerPacket(_))
         ));
+    }
+
+    #[test]
+    fn closes_device_and_transport_before_discarding_session_state() {
+        let session = SessionId::new(15).expect("session ID");
+        let (device, _) = MemoryDevice::pair(1_400);
+        let mut device_observer = device.clone();
+        let transport = UdpTransport::bind(loopback(), 1_400).expect("transport binds");
+        let tunnel = EncryptedTunnel::new(
+            device,
+            transport,
+            SessionCipher::new([1; 32], session, KeyGeneration(0), 1),
+            SessionCipher::new([2; 32], session, KeyGeneration(0), 2),
+            session,
+        );
+
+        tunnel.close().expect("tunnel closes");
+        let mut buffer = [0; 1_400];
+        assert_eq!(
+            device_observer.read_packet(&mut buffer),
+            Err(DeviceError::Closed)
+        );
     }
 
     #[test]
