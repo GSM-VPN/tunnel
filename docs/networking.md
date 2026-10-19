@@ -48,6 +48,11 @@ link and then restores the captured values, followed by a cache flush. The
 Rust library only returns argv-safe command records; it never changes the
 host resolver itself.
 
+When a UDP transport has a pinned remote endpoint, received datagrams are
+checked against the sender address before protocol decoding. A server may
+receive from an unset endpoint during initial admission; the authenticated
+handshake must establish the peer before pinning a remote address.
+
 `LinuxNetworkPlan` is the boundary between the validated policy and that
 privileged layer. It emits argv-safe `ip`, `sysctl`, and `nft` command records
 for server interface setup, IPv4 MASQUERADE, optional IPv6 addressing, and
