@@ -45,3 +45,8 @@ routes, and recovery after an interrupted process.
 interface and emits address setup before routing, followed by reverse cleanup.
 It is still a command planner; applying the commands and restoring a route
 snapshot belong to the privileged platform adapter.
+
+`ClientAddressPool` allocates paired client addresses starting at
+`10.80.0.2` and `fd80:1234:5678::2`, skips the server and network/broadcast
+addresses, and releases both families as one unit. Capacity exhaustion is
+reported before a partial pair can escape to the caller.
