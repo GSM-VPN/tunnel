@@ -3,6 +3,7 @@
 mod codec;
 mod device;
 mod protocol;
+mod transport;
 
 #[cfg(target_os = "linux")]
 mod linux_device;
@@ -15,3 +16,4 @@ pub use protocol::{
     KeyGeneration, MAX_PACKET_SIZE, MAX_PAYLOAD_SIZE, PROTOCOL_NAME, PROTOCOL_VERSION, PacketType,
     ProtocolError, ProtocolVersion, SequenceNumber, SessionId, SessionState,
 };
+pub use transport::{TransportError, UdpTransport};
