@@ -151,3 +151,8 @@ UDP 장애 정책은 [`udp-failure-policy.md`](./udp-failure-policy.md)에 따�
 데이터그램 손실은 무한 재전송하지 않고 세션 타임아웃·제한된 재연결로
 처리하며, 중복·재정렬은 키 세대별 Replay Window가 결정한다. Core 재시작은
 승인 상태만 복원하고 이전 세션 키와 카운터는 복원하지 않는다.
+
+`DnsCache`는 질의 원문 대신 호출자가 계산한 opaque fingerprint만 키로
+사용하고, 응답 TTL을 1초에서 24시간 사이로 제한한다. 캐시 용량은 고정되어
+있으며 만료 응답은 조회 전에 제거된다. 실제 DoT/DoH resolver adapter가
+연결되기 전까지 Linux 기본 적용 계층은 UDP/TCP 53만 사용한다.

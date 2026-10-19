@@ -1,9 +1,15 @@
 //! Validated DNS policy and platform command planning.
 
-use std::{net::IpAddr, time::Duration};
+use std::{
+    collections::HashMap,
+    net::IpAddr,
+    time::{Duration, SystemTime},
+};
 
 const MAX_UPSTREAMS: usize = 8;
 const MAX_SEARCH_DOMAINS: usize = 8;
+const MIN_CACHE_TTL: Duration = Duration::from_secs(1);
+const MAX_CACHE_TTL: Duration = Duration::from_hours(24);
 
 /// Transport used to reach an upstream resolver.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,6 +50,96 @@ pub struct DnsSnapshot {
     pub search_domains: Vec<String>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CachedDnsResponse {
+    response: Vec<u8>,
+    expires_at: SystemTime,
+}
+
+/// Bounded DNS response cache keyed by an opaque query fingerprint.
+///
+/// The cache deliberately does not accept query names or user identifiers.
+/// Callers must provide a stable fingerprint and the complete response bytes;
+/// entries are retained only until their bounded TTL expires.
+#[derive(Clone, Debug)]
+pub struct DnsCache {
+    capacity: usize,
+    entries: HashMap<u64, CachedDnsResponse>,
+}
+
+impl DnsCache {
+    /// Creates a cache with a fixed positive entry limit.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DnsConfigError::InvalidCacheCapacity`] when `capacity` is
+    /// zero.
+    pub fn new(capacity: usize) -> Result<Self, DnsConfigError> {
+        if capacity == 0 {
+            return Err(DnsConfigError::InvalidCacheCapacity);
+        }
+        Ok(Self {
+            capacity,
+            entries: HashMap::with_capacity(capacity),
+        })
+    }
+
+    /// Inserts a response with a TTL clamped to one second through 24 hours.
+    pub fn insert(&mut self, fingerprint: u64, response: Vec<u8>, ttl: Duration, now: SystemTime) {
+        let bounded_ttl = ttl.clamp(MIN_CACHE_TTL, MAX_CACHE_TTL);
+        let expires_at = now
+            .checked_add(bounded_ttl)
+            .unwrap_or(SystemTime::UNIX_EPOCH);
+        self.entries.insert(
+            fingerprint,
+            CachedDnsResponse {
+                response,
+                expires_at,
+            },
+        );
+        self.remove_expired(now);
+        while self.entries.len() > self.capacity {
+            if let Some(oldest) = self
+                .entries
+                .iter()
+                .min_by_key(|(_, entry)| entry.expires_at)
+                .map(|(key, _)| *key)
+            {
+                self.entries.remove(&oldest);
+            }
+        }
+    }
+
+    /// Returns a non-expired response without retaining query metadata.
+    pub fn get(&mut self, fingerprint: u64, now: SystemTime) -> Option<&[u8]> {
+        if self
+            .entries
+            .get(&fingerprint)
+            .is_some_and(|entry| entry.expires_at <= now)
+        {
+            self.entries.remove(&fingerprint);
+            return None;
+        }
+        self.entries
+            .get(&fingerprint)
+            .map(|entry| entry.response.as_slice())
+    }
+
+    fn remove_expired(&mut self, now: SystemTime) {
+        self.entries.retain(|_, entry| entry.expires_at > now);
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
 /// Ordered upstream selector for a resolver adapter.
 ///
 /// The selector stores only policy addresses and a cursor. It does not retain
@@ -79,6 +175,7 @@ pub enum DnsConfigError {
     UnsupportedLinuxTransport,
     InvalidInterfaceName,
     InvalidSearchDomain,
+    InvalidCacheCapacity,
 }
 
 impl DnsPolicy {
@@ -309,7 +406,8 @@ fn valid_interface_name(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        DnsPolicy, DnsSnapshot, DnsTransport, DnsUpstream, DnsUpstreamSelector, LinuxDnsPlan,
+        DnsCache, DnsPolicy, DnsSnapshot, DnsTransport, DnsUpstream, DnsUpstreamSelector,
+        LinuxDnsPlan,
     };
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
     use std::time::Duration;
@@ -450,5 +548,23 @@ mod tests {
         assert!(LinuxDnsPlan::new("tun0", policy.clone(), snapshot.clone()).is_err());
         let plain = DnsPolicy::new(vec![upstream("1.1.1.1".parse().unwrap())], vec![]).unwrap();
         assert!(LinuxDnsPlan::new("invalid interface", plain, snapshot).is_err());
+    }
+
+    #[test]
+    fn clamps_ttl_expires_entries_and_bounds_capacity_without_query_data() {
+        use std::time::{Duration, SystemTime};
+
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(100);
+        assert!(DnsCache::new(0).is_err());
+        let mut cache = DnsCache::new(1).unwrap();
+        cache.insert(7, vec![1, 2, 3], Duration::ZERO, now);
+        assert_eq!(cache.get(7, now), Some([1, 2, 3].as_slice()));
+        assert!(cache.get(7, now + Duration::from_secs(1)).is_none());
+
+        cache.insert(7, vec![4], Duration::from_hours(25), now);
+        cache.insert(8, vec![5], Duration::from_secs(60), now);
+        assert_eq!(cache.len(), 1);
+        assert_eq!(cache.get(7, now), Some([4].as_slice()));
+        assert!(cache.get(8, now).is_none());
     }
 }

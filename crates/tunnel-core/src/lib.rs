@@ -33,7 +33,7 @@ pub use codec::{TunnelHeader, TunnelPacket};
 pub use crypto::{CryptoError, ReplayWindow, SessionCipher};
 pub use device::{DeviceError, MemoryDevice, TunnelDevice};
 pub use dns::{
-    DnsCommand, DnsConfigError, DnsPolicy, DnsSnapshot, DnsTransport, DnsUpstream,
+    DnsCache, DnsCommand, DnsConfigError, DnsPolicy, DnsSnapshot, DnsTransport, DnsUpstream,
     DnsUpstreamMetrics, DnsUpstreamSelector, LinuxDnsPlan,
 };
 pub use encrypted_engine::{EncryptedTunnel, EncryptedTunnelError};
