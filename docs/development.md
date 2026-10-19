@@ -31,7 +31,7 @@ go vet ./...
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-targets --all-features
-cargo audit --locked
+cargo audit
 ```
 
 Rust packet parsing includes property tests over arbitrary byte sequences, and
