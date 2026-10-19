@@ -12,6 +12,7 @@ pub enum NoiseHandshakeError {
     MessageTooLarge,
     NotMyTurn,
     NotFinished,
+    UnauthorizedPeer,
 }
 
 impl From<snow::Error> for NoiseHandshakeError {
@@ -23,6 +24,7 @@ impl From<snow::Error> for NoiseHandshakeError {
 /// A two-message Noise IK handshake with a pinned responder static key.
 pub struct NoiseHandshake {
     state: Option<HandshakeState>,
+    expected_remote_static: Option<Vec<u8>>,
 }
 
 impl NoiseHandshake {
@@ -44,23 +46,33 @@ impl NoiseHandshake {
             .map_err(NoiseHandshakeError::from)?
             .build_initiator()
             .map_err(NoiseHandshakeError::from)?;
-        Ok(Self { state: Some(state) })
+        Ok(Self {
+            state: Some(state),
+            expected_remote_static: None,
+        })
     }
 
-    /// Builds a responder using its long-term static private key.
+    /// Builds a responder using its long-term static private key and an
+    /// approved initiator public key.
     ///
     /// # Errors
     ///
     /// Returns a Noise construction error when the static key or parameters
     /// are invalid.
-    pub fn responder(static_private_key: &[u8]) -> Result<Self, NoiseHandshakeError> {
+    pub fn responder(
+        static_private_key: &[u8],
+        initiator_public_key: &[u8],
+    ) -> Result<Self, NoiseHandshakeError> {
         let params: NoiseParams = NOISE_IK_PARAMS.parse()?;
         let state = Builder::new(params)
             .local_private_key(static_private_key)
             .map_err(NoiseHandshakeError::from)?
             .build_responder()
             .map_err(NoiseHandshakeError::from)?;
-        Ok(Self { state: Some(state) })
+        Ok(Self {
+            state: Some(state),
+            expected_remote_static: Some(initiator_public_key.to_vec()),
+        })
     }
 
     #[must_use]
@@ -114,6 +126,14 @@ impl NoiseHandshake {
         }
         let mut payload = vec![0; MAX_HANDSHAKE_MESSAGE_SIZE];
         let written = state.read_message(message, &mut payload)?;
+        if let Some(expected) = &self.expected_remote_static {
+            let actual = state
+                .get_remote_static()
+                .ok_or(NoiseHandshakeError::UnauthorizedPeer)?;
+            if actual != expected {
+                return Err(NoiseHandshakeError::UnauthorizedPeer);
+            }
+        }
         payload.truncate(written);
         Ok(payload)
     }
@@ -181,7 +201,8 @@ mod tests {
         let responder_key = builder.generate_keypair().unwrap();
         let mut initiator =
             NoiseHandshake::initiator(&initiator_key.private, &responder_key.public).unwrap();
-        let mut responder = NoiseHandshake::responder(&responder_key.private).unwrap();
+        let mut responder =
+            NoiseHandshake::responder(&responder_key.private, &initiator_key.public).unwrap();
 
         let first = initiator.write_message(b"hello").unwrap();
         assert_eq!(responder.read_message(&first).unwrap(), b"hello");
@@ -205,10 +226,11 @@ mod tests {
         let builder = Builder::new(params);
         let initiator_key = builder.generate_keypair().unwrap();
         let responder_key = builder.generate_keypair().unwrap();
-        let wrong_key = builder.generate_keypair().unwrap();
+        let unauthorized_key = builder.generate_keypair().unwrap();
         let mut initiator =
-            NoiseHandshake::initiator(&initiator_key.private, &wrong_key.public).unwrap();
-        let mut responder = NoiseHandshake::responder(&responder_key.private).unwrap();
+            NoiseHandshake::initiator(&unauthorized_key.private, &responder_key.public).unwrap();
+        let mut responder =
+            NoiseHandshake::responder(&responder_key.private, &initiator_key.public).unwrap();
         assert!(matches!(
             initiator.read_message(b"not yet"),
             Err(NoiseHandshakeError::NotMyTurn)
@@ -220,7 +242,17 @@ mod tests {
         let first = initiator.write_message(b"hello").unwrap();
         assert!(matches!(
             responder.read_message(&first),
-            Err(NoiseHandshakeError::Snow(_))
+            Err(NoiseHandshakeError::UnauthorizedPeer)
+        ));
+
+        let mut approved_initiator =
+            NoiseHandshake::initiator(&initiator_key.private, &responder_key.public).unwrap();
+        let mut approved_responder =
+            NoiseHandshake::responder(&responder_key.private, &initiator_key.public).unwrap();
+        let approved_first = approved_initiator.write_message(b"hello").unwrap();
+        assert!(matches!(
+            approved_responder.read_message(&approved_first),
+            Ok(payload) if payload == b"hello"
         ));
     }
 }
