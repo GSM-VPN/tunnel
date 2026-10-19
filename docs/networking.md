@@ -1,0 +1,18 @@
+# Linux networking notes
+
+The current Rust core provides a Linux TUN adapter and UDP transport. Network
+namespace integration, IP forwarding, nftables MASQUERADE, route management,
+DNS setup/restoration, IPv6 addressing, and endpoint exception routes are
+deployment work rather than automatic side effects of the library.
+
+The intended initial values are:
+
+- VPN IPv4 range: `10.80.0.0/16`
+- server address: `10.80.0.1`
+- UDP port: `51820`
+- tunnel MTU: `1400`
+- IPv6 range: `fd80:1234:5678::/64`
+
+Before enabling a full-tunnel route, preserve a route to the UDP endpoint.
+Before changing firewall rules, capture the existing rules and provide a
+rollback path. A Kill Switch is not implemented by the Rust library yet.
