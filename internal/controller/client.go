@@ -101,6 +101,18 @@ func (client Client) GetMetrics(requestID uint64) (protocol.MetricsSnapshot, err
 	return protocol.UnmarshalMetrics(response.Payload)
 }
 
+// GetHealth retrieves the Core lifecycle label without secret material.
+func (client Client) GetHealth(requestID uint64) (string, error) {
+	response, err := client.callSuccessful(protocol.ManagementRequest{
+		Version: protocol.ManagementVersion, RequestID: requestID,
+		Operation: protocol.OperationHealth,
+	})
+	if err != nil {
+		return "", err
+	}
+	return string(response.Payload), nil
+}
+
 func (client Client) CreateSession(requestID uint64, session protocol.SessionRequest) (protocol.SessionStatus, error) {
 	response, err := client.callSuccessful(protocol.ManagementRequest{Version: protocol.ManagementVersion, RequestID: requestID, Operation: protocol.OperationCreateSession, Payload: session.MarshalBinary()})
 	if err != nil {

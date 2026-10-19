@@ -3,14 +3,16 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/GSM-VPN/tunnel/internal/protocol"
 )
 
 var (
-	ErrCoreAlreadyStarted = errors.New("tunnel core controller is already started")
-	ErrCoreNotStarted     = errors.New("tunnel core controller is not started")
+	ErrCoreAlreadyStarted     = errors.New("tunnel core controller is already started")
+	ErrCoreNotStarted         = errors.New("tunnel core controller is not started")
+	ErrCoreMetricsUnavailable = errors.New("core metrics are unavailable")
 )
 
 // CoreState is the controller-owned lifecycle state of the Rust Core child.
@@ -29,6 +31,12 @@ type CoreStatus struct {
 	State      CoreState
 	StartCount uint32
 	LastError  string
+}
+
+// CoreMetricsSnapshot combines the Core health label and secret-free counters.
+type CoreMetricsSnapshot struct {
+	Health  string
+	Metrics protocol.MetricsSnapshot
 }
 
 type coreStarter func(context.Context, CoreCommand) (CoreProcess, error)
@@ -179,6 +187,31 @@ func (controller *CoreController) Status() CoreStatus {
 		status.LastError = controller.lastError.Error()
 	}
 	return status
+}
+
+// CollectMetrics retrieves an operational snapshot from a running Core.
+// requestID and requestID+1 identify the health and metrics IPC calls.
+func (controller *CoreController) CollectMetrics(ctx context.Context, requestID uint64) (CoreMetricsSnapshot, error) {
+	if err := ctx.Err(); err != nil {
+		return CoreMetricsSnapshot{}, err
+	}
+	controller.mu.Lock()
+	state := controller.state
+	socketPath := controller.config.SocketPath
+	controller.mu.Unlock()
+	if state != CoreRunning || socketPath == "" || requestID == ^uint64(0) {
+		return CoreMetricsSnapshot{}, ErrCoreMetricsUnavailable
+	}
+	client := Client{SocketPath: socketPath}
+	health, err := client.GetHealth(requestID)
+	if err != nil {
+		return CoreMetricsSnapshot{}, fmt.Errorf("get Core health: %w", err)
+	}
+	metrics, err := client.GetMetrics(requestID + 1)
+	if err != nil {
+		return CoreMetricsSnapshot{}, fmt.Errorf("get Core metrics: %w", err)
+	}
+	return CoreMetricsSnapshot{Health: health, Metrics: metrics}, nil
 }
 
 func (controller *CoreController) run(ctx context.Context) {
