@@ -28,6 +28,12 @@ instead of reusing the previous data-key generation. None of these paths
 enter an unbounded retry loop. Successful handshakes reset both handshake and
 reconnect attempts; reaching the handshake limit enters `CLOSING`.
 
+The management `TerminateSession` operation is a connection-level close: it
+removes only the selected session and leaves the peer's long-term approval in
+the authorization registry. The same authorized peer can therefore create a
+new session with a new session ID. `RemovePeer` is a separate revocation
+operation; it removes the approval and all sessions belonging to that peer.
+
 The encrypted tunnel exposes a consuming close operation. It closes the
 device and UDP transport before the tunnel is dropped, which also discards
 its session ciphers, sequence counter, and byte counter.
