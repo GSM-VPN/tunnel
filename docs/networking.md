@@ -13,6 +13,16 @@ The intended initial values are:
 - tunnel MTU: `1400`
 - IPv6 range: `fd80:1234:5678::/64`
 
+The Rust core exposes these values through `TunnelNetworkConfig`. Its default
+policy is dual-stack and uses UDP port `51820`. The encrypted payload budget
+is derived from the configured MTU: `1400 - 24-byte header - 16-byte AEAD tag
+= 1360 bytes`. Invalid server addresses, zero ports, and MTUs below the
+IPv6-safe minimum are rejected before an engine starts.
+
 Before enabling a full-tunnel route, preserve a route to the UDP endpoint.
 Before changing firewall rules, capture the existing rules and provide a
 rollback path. A Kill Switch is not implemented by the Rust library yet.
+
+Configuration validation does not apply routes, firewall rules, DNS settings,
+or NAT rules. Those operations remain in a privileged platform/deployment
+layer and must preserve an endpoint exception route plus a rollback path.
