@@ -129,6 +129,8 @@ impl TunnelPacket {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
 
     fn packet(payload: Vec<u8>) -> TunnelPacket {
@@ -244,6 +246,13 @@ mod tests {
     fn arbitrary_bytes_never_panic() {
         for length in 0..=MAX_PACKET_SIZE + 16 {
             let bytes = vec![0xa5; length];
+            let _ = TunnelPacket::decode(&bytes);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn arbitrary_packets_never_panic(bytes in proptest::collection::vec(any::<u8>(), 0..=1_500)) {
             let _ = TunnelPacket::decode(&bytes);
         }
     }

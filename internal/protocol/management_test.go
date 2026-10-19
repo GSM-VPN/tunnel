@@ -127,3 +127,19 @@ func TestPeerRegistrationPayloadRejectsInvalidData(t *testing.T) {
 		t.Fatalf("expected malformed payload error, got %v", err)
 	}
 }
+
+func FuzzUnmarshalRequestFrameNeverPanics(f *testing.F) {
+	f.Add([]byte{0, 0, 0, 0})
+	f.Add([]byte{0, 0, 0, 20, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0})
+	f.Fuzz(func(t *testing.T, frame []byte) {
+		_, _ = UnmarshalRequestFrame(frame)
+	})
+}
+
+func FuzzUnmarshalResponseFrameNeverPanics(f *testing.F) {
+	f.Add([]byte{0, 0, 0, 0})
+	f.Add([]byte{0, 0, 0, 22, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 200, 0, 0, 0, 0, 0, 0})
+	f.Fuzz(func(t *testing.T, frame []byte) {
+		_, _ = UnmarshalResponseFrame(frame)
+	})
+}
