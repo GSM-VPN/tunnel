@@ -39,6 +39,11 @@ include it in Core IPC payloads.
 The Core validates `SERVER_PRIVATE_KEY` before binding its management socket;
 a missing or malformed key prevents startup.
 
+Session cipher keys use `zeroize`-backed storage: the previous generation is
+cleared before replacement, and the active key is cleared when the cipher is
+dropped. The long-term server private key and the temporary key-parsing buffer
+use the same storage policy.
+
 `PeerRateLimiter` applies separate bounded fixed-window limits for handshake
 and packet admission, with a maximum number of tracked peer IDs. This keeps a
 single peer from consuming all admission work and prevents unbounded limiter

@@ -751,6 +751,7 @@ dependencies = [
  "sha2",
  "snow",
  "x25519-dalek",
+ "zeroize",
 ]
 
 [[package]]
