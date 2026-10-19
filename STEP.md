@@ -853,43 +853,43 @@ DISCONNECTED
 
 ### 9.1. Rust Core 관리 API
 
-- [ ] Initialize Engine
-- [ ] Start Engine
-- [ ] Stop Engine
-- [ ] Register Peer
-- [ ] Remove Peer
-- [ ] Create Session
-- [ ] Terminate Session
-- [ ] Get Session
-- [ ] List Sessions
-- [ ] Get Statistics
-- [ ] Update Configuration
-- [ ] Get Health
+- [x] Initialize Engine
+- [x] Start Engine
+- [x] Stop Engine
+- [x] Register Peer
+- [x] Remove Peer
+- [x] Create Session
+- [x] Terminate Session
+- [x] Get Session
+- [x] List Sessions
+- [x] Get Statistics
+- [x] Update Configuration
+- [x] Get Health
 
 ### 9.2. IPC 설계
 
-- [ ] Unix Domain Socket 생성
-- [ ] IPC 요청 포맷 정의
-- [ ] IPC 응답 포맷 정의
-- [ ] 요청 ID 정의
-- [ ] 오류 코드 정의
-- [ ] 요청 크기 제한
+- [x] Unix Domain Socket 생성
+- [x] IPC 요청 포맷 정의
+- [x] IPC 응답 포맷 정의
+- [x] 요청 ID 정의
+- [x] 오류 코드 정의
+- [x] 요청 크기 제한
 - [ ] 타임아웃
 - [ ] 소켓 파일 권한 설정
 - [ ] 호출자 권한 검사
 - [ ] 명령별 권한 검사
 - [ ] 엔진 재시작 처리
 - [ ] 상태 재동기화
-- [ ] 비정상 요청 처리
+- [x] 비정상 요청 처리
 
 ### 9.3. Go Controller
 
 - [ ] Rust Core 프로세스 실행
 - [ ] 프로세스 종료 감지
 - [ ] 자동 재시작 정책
-- [ ] 설정 전달
+- [x] 설정 전달
 - [ ] Peer 승인 정보 전달
-- [ ] 세션 상태 조회
+- [x] 세션 상태 조회
 - [ ] 메트릭 수집
 - [ ] 운영 로그
 - [ ] 상태 변화 이벤트 제공
