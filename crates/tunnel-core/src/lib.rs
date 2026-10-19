@@ -17,6 +17,7 @@ mod transport;
 mod linux_device;
 
 mod identity;
+mod ip_packet;
 mod key_rotation;
 mod management;
 #[cfg(unix)]
@@ -36,6 +37,10 @@ pub use dns::{
 pub use encrypted_engine::{EncryptedTunnel, EncryptedTunnelError};
 pub use engine::{PlainTunnel, TunnelError};
 pub use identity::{IdentityConfigError, ServerIdentity};
+pub use ip_packet::{
+    InnerIpPacketError, InnerIpPacketInfo, InnerIpVersion, ipv4_header_checksum,
+    is_tunnel_ipv4_address, validate_inner_ip_packet,
+};
 pub use key_rotation::{KeyRotationPolicy, RotationReason};
 #[cfg(target_os = "linux")]
 pub use linux_device::LinuxTunDevice;
