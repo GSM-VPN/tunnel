@@ -75,6 +75,12 @@ After close, `is_closed` is true and both `send` and `receive` return
 indefinitely. A receive timeout remains a transient I/O result and does not
 pretend that the transport was closed.
 
+Malformed datagrams are scoped to the current receive attempt. The tunnel
+returns a typed protocol error, does not write to the device, and can continue
+receiving subsequent datagrams on the same socket. The process-level loop owns
+the policy for logging, metrics, or bounded retry; packet decode failure alone
+must not terminate the process.
+
 `LinuxNetworkPlan` is the boundary between the validated policy and that
 privileged layer. It emits argv-safe `ip`, `sysctl`, and `nft` command records
 for server interface setup, IPv4 MASQUERADE, optional IPv6 addressing, and
