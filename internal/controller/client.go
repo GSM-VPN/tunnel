@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -10,6 +11,7 @@ import (
 )
 
 var ErrUnexpectedResponse = errors.New("unexpected management response")
+var ErrCoreRejectedRequest = errors.New("core rejected management request")
 
 // Client sends control-plane requests over a local Unix Domain Socket.
 type Client struct {
@@ -49,6 +51,39 @@ func (client Client) Call(request protocol.ManagementRequest) (protocol.Manageme
 	}
 	if response.Version != request.Version || response.RequestID != request.RequestID {
 		return protocol.ManagementResponse{}, fmt.Errorf("%w: version or request ID mismatch", ErrUnexpectedResponse)
+	}
+	return response, nil
+}
+
+// RegisterPeer sends an approved peer without transferring private key material.
+func (client Client) RegisterPeer(requestID uint64, peer protocol.PeerRegistration) (protocol.ManagementResponse, error) {
+	payload, err := protocol.MarshalPeerRegistration(peer)
+	if err != nil {
+		return protocol.ManagementResponse{}, err
+	}
+	return client.callSuccessful(protocol.ManagementRequest{
+		Version: protocol.ManagementVersion, RequestID: requestID,
+		Operation: protocol.OperationRegisterPeer, Payload: payload,
+	})
+}
+
+// RemovePeer revokes a peer approval in the Rust Core.
+func (client Client) RemovePeer(requestID uint64, peerID uint64) (protocol.ManagementResponse, error) {
+	payload := make([]byte, 8)
+	binary.BigEndian.PutUint64(payload, peerID)
+	return client.callSuccessful(protocol.ManagementRequest{
+		Version: protocol.ManagementVersion, RequestID: requestID,
+		Operation: protocol.OperationRemovePeer, Payload: payload,
+	})
+}
+
+func (client Client) callSuccessful(request protocol.ManagementRequest) (protocol.ManagementResponse, error) {
+	response, err := client.Call(request)
+	if err != nil {
+		return protocol.ManagementResponse{}, err
+	}
+	if response.Status < 200 || response.Status >= 300 {
+		return response, fmt.Errorf("%w: status=%d error=%d", ErrCoreRejectedRequest, response.Status, response.ErrorCode)
 	}
 	return response, nil
 }
