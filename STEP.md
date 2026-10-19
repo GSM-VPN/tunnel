@@ -415,7 +415,7 @@ Windows/Wintun
 - [x] `go vet` 설정
 - [x] Rust Clippy 설정
 - [ ] 공통 오류 처리 규칙 정의
-- [ ] 로그 레벨과 로그 포맷 정의
+- [x] 로그 레벨과 로그 포맷 정의
 - [ ] 비밀값을 출력하지 않는 Debug/Display 규칙 정의
 - [x] 린트 및 포맷 검사 자동화
 
@@ -891,7 +891,7 @@ DISCONNECTED
 - [x] Peer 승인 정보 전달
 - [x] 세션 상태 조회
 - [x] 메트릭 수집
-- [ ] 운영 로그
+- [x] 운영 로그
 - [x] Core 상태 조회 제공
 - [x] Controller 종료 시 Core 정리
 

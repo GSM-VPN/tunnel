@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"github.com/GSM-VPN/tunnel/internal/protocol"
@@ -57,6 +58,7 @@ type CoreController struct {
 	cancel      context.CancelFunc
 	done        chan struct{}
 	result      error
+	logger      *slog.Logger
 }
 
 // NewCoreController creates a controller that launches the configured Rust
@@ -81,7 +83,27 @@ func newCoreController(config CoreCommand, policy RestartPolicy, start coreStart
 		start:      start,
 		desired:    NewCoreDesiredState(),
 		state:      CoreStopped,
+		logger:     coreOperationalLogger(),
 	}
+}
+
+// SetLogger enables structured lifecycle logging for this controller. Events
+// contain only state names, counters, and bounded outcome metadata; secrets,
+// packet contents, and user identifiers are never emitted by the controller.
+func (controller *CoreController) SetLogger(logger *slog.Logger) {
+	controller.mu.Lock()
+	defer controller.mu.Unlock()
+	if logger == nil {
+		controller.logger = coreOperationalLogger()
+		return
+	}
+	controller.logger = logger
+}
+
+func (controller *CoreController) operationalLogger() *slog.Logger {
+	controller.mu.Lock()
+	defer controller.mu.Unlock()
+	return controller.logger
 }
 
 // SetConfiguration stores network policy for initial startup and every Core
@@ -162,8 +184,8 @@ func (controller *CoreController) DesiredState() CoreDesiredState {
 // Start begins Core supervision and returns once the monitor is installed.
 func (controller *CoreController) Start(ctx context.Context) error {
 	controller.mu.Lock()
-	defer controller.mu.Unlock()
 	if controller.state != CoreStopped && controller.state != CoreUnhealthy {
+		controller.mu.Unlock()
 		return ErrCoreAlreadyStarted
 	}
 	runContext, cancel := context.WithCancel(ctx)
@@ -172,6 +194,9 @@ func (controller *CoreController) Start(ctx context.Context) error {
 	controller.result = nil
 	controller.lastError = nil
 	controller.state = CoreStarting
+	logger := controller.logger
+	controller.mu.Unlock()
+	logCoreEvent(logger, "core_start_requested")
 	go controller.run(runContext)
 	return nil
 }
@@ -184,8 +209,11 @@ func (controller *CoreController) Stop() error {
 		return nil
 	}
 	if controller.state == CoreUnhealthy {
+		previousState := stateName(controller.state)
 		controller.state = CoreStopped
+		logger := controller.logger
 		controller.mu.Unlock()
+		logCoreEvent(logger, "core_stop_completed", "previous_state", previousState)
 		return nil
 	}
 	if controller.cancel == nil || controller.done == nil {
@@ -193,11 +221,14 @@ func (controller *CoreController) Stop() error {
 		return ErrCoreNotStarted
 	}
 	controller.state = CoreStopping
+	previousState := stateName(controller.state)
 	cancel := controller.cancel
 	done := controller.done
+	logger := controller.logger
 	controller.mu.Unlock()
 	cancel()
 	<-done
+	logCoreEvent(logger, "core_stop_completed", "previous_state", previousState)
 	return nil
 }
 
@@ -261,8 +292,10 @@ func (controller *CoreController) CollectMetrics(ctx context.Context, requestID 
 
 func (controller *CoreController) run(ctx context.Context) {
 	result := controller.supervisor.Run(ctx, func() (CoreProcess, error) {
+		logCoreEvent(controller.operationalLogger(), "core_start_attempt")
 		process, err := controller.start(ctx, controller.config)
 		if err != nil {
+			logCoreEvent(controller.operationalLogger(), "core_start_failed")
 			return nil, err
 		}
 		if controller.synchronize != nil {
@@ -271,18 +304,20 @@ func (controller *CoreController) run(ctx context.Context) {
 			controller.mu.Unlock()
 			if err := controller.synchronize(ctx, desired); err != nil {
 				_ = process.Stop()
+				logCoreEvent(controller.operationalLogger(), "core_state_sync_failed")
 				return nil, err
 			}
 		}
 		controller.mu.Lock()
 		controller.startCount++
 		controller.state = CoreRunning
+		startCount := controller.startCount
 		controller.mu.Unlock()
+		logCoreEvent(controller.operationalLogger(), "core_running", "start_count", startCount)
 		return process, nil
 	})
 
 	controller.mu.Lock()
-	defer controller.mu.Unlock()
 	controller.result = result
 	if controller.state == CoreStopping || errors.Is(result, context.Canceled) {
 		controller.state = CoreStopped
@@ -293,5 +328,26 @@ func (controller *CoreController) run(ctx context.Context) {
 	} else {
 		controller.state = CoreStopped
 	}
+	state := controller.state
+	logger := controller.logger
 	close(controller.done)
+	controller.mu.Unlock()
+	logCoreEvent(logger, "core_state_changed", "state", stateName(state), "failure", result != nil && !errors.Is(result, context.Canceled))
+}
+
+func stateName(state CoreState) string {
+	switch state {
+	case CoreStopped:
+		return "stopped"
+	case CoreStarting:
+		return "starting"
+	case CoreRunning:
+		return "running"
+	case CoreStopping:
+		return "stopping"
+	case CoreUnhealthy:
+		return "unhealthy"
+	default:
+		return "unknown"
+	}
 }
