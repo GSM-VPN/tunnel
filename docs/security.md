@@ -62,6 +62,10 @@ previous generation.
 and packet admission, with a maximum number of tracked peer IDs. This keeps a
 single peer from consuming all admission work and prevents unbounded limiter
 state growth; platform adapters must invoke it before expensive processing.
+Management frames and UDP datagrams also have fixed maximum sizes, and malformed
+datagrams are discarded before inner-packet delivery. These boundaries cap the
+work attributable to an invalid input; host UDP queue sizing and sustained-load
+measurements remain deployment work.
 
 `PeerRegistry` treats client public keys and assigned IPv4/IPv6 addresses as
 unique approval state. Reusing identity material or an address is rejected
