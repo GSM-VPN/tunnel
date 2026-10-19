@@ -12,6 +12,7 @@ mod rate_limit;
 mod session;
 mod session_endpoint;
 mod session_table;
+mod throughput;
 mod transport;
 
 #[cfg(target_os = "linux")]
@@ -79,4 +80,5 @@ pub use session::{
 };
 pub use session_endpoint::{SessionEndpointError, SessionEndpointTable};
 pub use session_table::{SessionTable, SessionTableError};
+pub use throughput::{FairByteRateLimiter, ThroughputMeter, ThroughputPolicy, ThroughputSample};
 pub use transport::{TransportError, UdpTransport};
