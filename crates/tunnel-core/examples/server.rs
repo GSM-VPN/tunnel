@@ -29,6 +29,8 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         "server received_bytes={length} peer={peer} payload_bytes={}",
         packet.payload.len()
     );
+    socket.send_to(&buffer[..length], peer)?;
+    println!("server echoed_bytes={length} peer={peer}");
     println!("server stopped");
     Ok(())
 }
