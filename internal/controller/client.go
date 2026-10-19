@@ -89,6 +89,18 @@ func (client Client) Stop(requestID uint64) (protocol.ManagementResponse, error)
 	return client.callSuccessful(protocol.ManagementRequest{Version: protocol.ManagementVersion, RequestID: requestID, Operation: protocol.OperationStop})
 }
 
+// GetMetrics retrieves the secret-free Core counters.
+func (client Client) GetMetrics(requestID uint64) (protocol.MetricsSnapshot, error) {
+	response, err := client.callSuccessful(protocol.ManagementRequest{
+		Version: protocol.ManagementVersion, RequestID: requestID,
+		Operation: protocol.OperationGetMetrics,
+	})
+	if err != nil {
+		return protocol.MetricsSnapshot{}, err
+	}
+	return protocol.UnmarshalMetrics(response.Payload)
+}
+
 func (client Client) CreateSession(requestID uint64, session protocol.SessionRequest) (protocol.SessionStatus, error) {
 	response, err := client.callSuccessful(protocol.ManagementRequest{Version: protocol.ManagementVersion, RequestID: requestID, Operation: protocol.OperationCreateSession, Payload: session.MarshalBinary()})
 	if err != nil {
