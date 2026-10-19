@@ -33,6 +33,12 @@ rejects IPv6 when dual-stack mode is disabled. Packet fragmentation and
 reassembly are outside the initial scope; callers should reject packets above
 the derived budget before encryption.
 
+The same budget is derived from the configured MTU for both address families,
+so the payload limit is not a fixed IPv4-only constant. IPv6 identification
+and dual-stack budget validation are covered by Core tests; path-MTU discovery,
+ICMP Packet Too Big handling, and host-specific measurements remain integration
+work.
+
 Before enabling a full-tunnel route, preserve a route to the UDP endpoint.
 Before changing firewall rules, capture the existing rules and provide a
 rollback path. The Rust library only builds a declarative Kill Switch plan;
