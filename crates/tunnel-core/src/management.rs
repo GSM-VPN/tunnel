@@ -348,7 +348,10 @@ fn decode_configuration(payload: &[u8]) -> Result<TunnelNetworkConfig, ()> {
 
 fn status_for_peer_error(error: &PeerRegistryError) -> u16 {
     match error {
-        PeerRegistryError::DuplicatePeer | PeerRegistryError::Capacity => STATUS_CONFLICT,
+        PeerRegistryError::DuplicatePeer
+        | PeerRegistryError::DuplicatePublicKey
+        | PeerRegistryError::DuplicateAddress
+        | PeerRegistryError::Capacity => STATUS_CONFLICT,
         PeerRegistryError::UnknownPeer => STATUS_NOT_FOUND,
         PeerRegistryError::EmptyUserId
         | PeerRegistryError::InvalidAddress
