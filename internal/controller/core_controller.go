@@ -118,16 +118,20 @@ func (controller *CoreController) SetConfiguration(configuration protocol.Networ
 // restart. PeerRegistration intentionally contains no private key material.
 func (controller *CoreController) ApprovePeer(peer protocol.PeerRegistration) {
 	controller.mu.Lock()
-	defer controller.mu.Unlock()
 	controller.desired.RegisterPeer(peer)
+	logger := controller.logger
+	controller.mu.Unlock()
+	logCoreEvent(logger, "peer_approval_updated", "peer_id", peer.PeerID)
 }
 
 // RevokePeer removes a peer from the state that will be restored after a Core
 // restart.
 func (controller *CoreController) RevokePeer(peerID uint64) {
 	controller.mu.Lock()
-	defer controller.mu.Unlock()
 	controller.desired.RemovePeer(peerID)
+	logger := controller.logger
+	controller.mu.Unlock()
+	logCoreEvent(logger, "peer_approval_revoked", "peer_id", peerID)
 }
 
 // ApplyPeerApproval records an approval and applies it immediately when Core

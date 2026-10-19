@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/GSM-VPN/tunnel/internal/protocol"
 )
 
 func TestCoreControllerLogsSecretFreeLifecycleEvents(t *testing.T) {
@@ -48,5 +50,30 @@ func TestCoreControllerUsesDiscardLoggerByDefault(t *testing.T) {
 	)
 	if controller.logger == nil {
 		t.Fatal("controller has no default logger")
+	}
+}
+
+func TestCoreControllerAuditsPeerApprovalChangesWithoutSecrets(t *testing.T) {
+	var output bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&output, nil))
+	controller := newCoreController(
+		CoreCommand{BinaryPath: "core", SocketPath: "/tmp/core.sock"},
+		DefaultRestartPolicy(),
+		func(context.Context, CoreCommand) (CoreProcess, error) { return nil, context.Canceled },
+	)
+	controller.SetLogger(logger)
+	controller.ApprovePeer(protocol.PeerRegistration{PeerID: 7, PublicKey: [32]byte{1}})
+	controller.RevokePeer(7)
+
+	logs := output.String()
+	for _, event := range []string{"peer_approval_updated", "peer_approval_revoked", "peer_id"} {
+		if !strings.Contains(logs, event) {
+			t.Fatalf("missing %q in logs: %s", event, logs)
+		}
+	}
+	for _, forbidden := range []string{"private_key", "public_key", "packet", "secret"} {
+		if strings.Contains(logs, forbidden) {
+			t.Fatalf("forbidden value %q was logged: %s", forbidden, logs)
+		}
 	}
 }

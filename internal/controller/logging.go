@@ -11,8 +11,8 @@ func coreOperationalLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 }
 
-// logCoreEvent accepts lifecycle metadata only. It deliberately has no path
-// for command, peer, packet, key, or raw error values.
+// logCoreEvent accepts bounded lifecycle and approval metadata only. It
+// deliberately has no path for command, packet, key, or raw error values.
 func logCoreEvent(logger *slog.Logger, event string, attrs ...any) {
 	if logger != nil {
 		logger.Info(event, attrs...)
