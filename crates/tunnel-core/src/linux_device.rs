@@ -1,5 +1,6 @@
 #![cfg(target_os = "linux")]
 #![allow(unsafe_code)]
+#![deny(unsafe_op_in_unsafe_fn)]
 
 use std::ffi::CString;
 use std::fs::{File, OpenOptions};
@@ -36,7 +37,7 @@ impl LinuxTunDevice {
         if mtu == 0 {
             return Err(DeviceError::Io(std::io::ErrorKind::InvalidInput));
         }
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .read(true)
             .write(true)
             .open("/dev/net/tun")
