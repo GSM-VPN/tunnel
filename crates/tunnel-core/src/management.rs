@@ -760,6 +760,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn maps_peer_errors_to_stable_management_statuses() {
+        for error in [
+            PeerRegistryError::DuplicatePeer,
+            PeerRegistryError::DuplicatePublicKey,
+            PeerRegistryError::DuplicateAddress,
+            PeerRegistryError::Capacity,
+        ] {
+            assert_eq!(status_for_peer_error(&error), STATUS_CONFLICT);
+        }
+        assert_eq!(
+            status_for_peer_error(&PeerRegistryError::UnknownPeer),
+            STATUS_NOT_FOUND
+        );
+        for error in [
+            PeerRegistryError::EmptyUserId,
+            PeerRegistryError::InvalidAddress,
+            PeerRegistryError::InvalidExpiry,
+        ] {
+            assert_eq!(status_for_peer_error(&error), STATUS_BAD_REQUEST);
+        }
+    }
+
+    #[test]
     fn read_only_permission_rejects_mutations_but_allows_health() {
         let mut service = ManagementService::new(4, Metrics::default());
         let initialize = ManagementRequest {
