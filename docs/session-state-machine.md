@@ -28,6 +28,10 @@ instead of reusing the previous data-key generation. None of these paths
 enter an unbounded retry loop. Successful handshakes reset both handshake and
 reconnect attempts; reaching the handshake limit enters `CLOSING`.
 
+The encrypted tunnel exposes a consuming close operation. It closes the
+device and UDP transport before the tunnel is dropped, which also discards
+its session ciphers, sequence counter, and byte counter.
+
 The encrypted data path exposes a rekey boundary for authenticated
 handshake results. A replacement must use a strictly newer key generation and
 updates both directional ciphers together. The old generation's replay
