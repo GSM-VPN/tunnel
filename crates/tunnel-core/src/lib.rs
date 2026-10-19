@@ -29,8 +29,9 @@ pub use management::{
     OPERATION_TERMINATE_SESSION, OPERATION_UPDATE_CONFIGURATION,
 };
 pub use protocol::{
-    KeyGeneration, MAX_PACKET_SIZE, MAX_PAYLOAD_SIZE, PROTOCOL_NAME, PROTOCOL_VERSION, PacketType,
-    ProtocolError, ProtocolVersion, SequenceNumber, SessionId, SessionState,
+    AEAD_TAG_SIZE, KeyGeneration, MAX_ENCRYPTED_PAYLOAD_SIZE, MAX_PACKET_SIZE, MAX_PAYLOAD_SIZE,
+    PROTOCOL_NAME, PROTOCOL_VERSION, PacketType, ProtocolError, ProtocolVersion, SequenceNumber,
+    SessionId, SessionState,
 };
 pub use session::{
     LifecycleState, SessionError, SessionEvent, SessionMachine, SessionPolicy, Transition,

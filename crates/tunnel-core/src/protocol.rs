@@ -15,6 +15,12 @@ pub const MAX_PACKET_SIZE: usize = 1_400;
 /// Maximum payload that fits in an initial tunnel packet.
 pub const MAX_PAYLOAD_SIZE: usize = MAX_PACKET_SIZE - HEADER_SIZE;
 
+/// ChaCha20-Poly1305 authentication tag size in bytes.
+pub const AEAD_TAG_SIZE: usize = 16;
+
+/// Maximum plaintext that fits after the tunnel header and AEAD tag.
+pub const MAX_ENCRYPTED_PAYLOAD_SIZE: usize = MAX_PAYLOAD_SIZE - AEAD_TAG_SIZE;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProtocolVersion {
     pub major: u8,
