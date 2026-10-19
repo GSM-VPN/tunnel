@@ -44,6 +44,8 @@ until the previous approval is revoked.
 Management peer revocation removes matching managed sessions immediately. The
 service also permits at most one active session per peer and bounds the total
 managed session table by the configured peer capacity (216 by default).
+Expired approvals are purged at the start of each management request, releasing
+their addresses and closing any associated sessions before the request runs.
 
 ## Known gaps
 
