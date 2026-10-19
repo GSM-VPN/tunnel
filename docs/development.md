@@ -80,7 +80,9 @@ contents, or per-user identity data.
 `with_metrics`. Successful data-plane sends and receives update packet/byte
 counters, while device, transport, codec, authentication, inner-packet, and
 session-type failures increment `packet_errors`. The metrics object stores only
-atomic counters and never retains the failed datagram or its plaintext.
+atomic counters and never retains the failed datagram or its plaintext. It also
+keeps a bounded snapshot of tx/rx bytes and packets for up to 216 observed
+session IDs; management session removal removes that per-session snapshot.
 
 VPN Server 승인 연동은 [`vpn-server-integration.md`](./vpn-server-integration.md)의
 경계를 따른다. Controller는 Gateway/VPN Server의 정규화된 승인 정보와

@@ -234,7 +234,7 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
             self.next_sequence = next_sequence;
             self.transmitted_bytes = next_transmitted_bytes;
             if let Some(metrics) = &self.metrics {
-                metrics.record_tx(sent as u64);
+                metrics.record_tx_for(self.session_id, sent as u64);
             }
             Ok(sent)
         })();
@@ -286,7 +286,7 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
                     validate_inner_ip_packet(&plaintext, self.inner_packet_mtu, self.dual_stack)?;
                     let written = self.device.write_packet(&plaintext)?;
                     if let Some(metrics) = &self.metrics {
-                        metrics.record_rx(length as u64);
+                        metrics.record_rx_for(self.session_id, length as u64);
                     }
                     Ok(written)
                 }

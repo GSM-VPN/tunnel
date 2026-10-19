@@ -1,9 +1,24 @@
 //! Low-cardinality, secret-free Core metrics.
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
+use std::{
+    collections::HashMap,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
 };
+
+use crate::SessionId;
+
+const MAX_SESSION_METRICS: usize = 216;
+
+#[derive(Clone, Copy, Default)]
+struct SessionTraffic {
+    tx_bytes: u64,
+    rx_bytes: u64,
+    tx_packets: u64,
+    rx_packets: u64,
+}
 
 #[derive(Default)]
 struct MetricsInner {
@@ -18,6 +33,7 @@ struct MetricsInner {
     handshake_failures: AtomicU64,
     keepalive_failures: AtomicU64,
     packet_errors: AtomicU64,
+    session_traffic: Mutex<HashMap<SessionId, SessionTraffic>>,
 }
 
 /// Thread-safe counters that never retain keys, plaintext, or user identity.
@@ -42,6 +58,15 @@ pub struct MetricsSnapshot {
     pub packet_errors: u64,
 }
 
+/// Secret-free traffic counters for one tunnel session.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SessionMetricsSnapshot {
+    pub tx_bytes: u64,
+    pub rx_bytes: u64,
+    pub tx_packets: u64,
+    pub rx_packets: u64,
+}
+
 impl Metrics {
     pub fn session_started(&self) {
         self.inner.active_sessions.fetch_add(1, Ordering::Relaxed);
@@ -61,9 +86,56 @@ impl Metrics {
         self.inner.tx_bytes.fetch_add(bytes, Ordering::Relaxed);
     }
 
+    /// Records a successful data-plane send for one session.
+    pub fn record_tx_for(&self, session_id: SessionId, bytes: u64) {
+        self.record_tx(bytes);
+        if let Ok(mut traffic) = self.inner.session_traffic.lock()
+            && (traffic.len() < MAX_SESSION_METRICS || traffic.contains_key(&session_id))
+        {
+            let entry = traffic.entry(session_id).or_default();
+            entry.tx_packets = entry.tx_packets.saturating_add(1);
+            entry.tx_bytes = entry.tx_bytes.saturating_add(bytes);
+        }
+    }
+
     pub fn record_rx(&self, bytes: u64) {
         self.inner.rx_packets.fetch_add(1, Ordering::Relaxed);
         self.inner.rx_bytes.fetch_add(bytes, Ordering::Relaxed);
+    }
+
+    /// Records a successful data-plane receive for one session.
+    pub fn record_rx_for(&self, session_id: SessionId, bytes: u64) {
+        self.record_rx(bytes);
+        if let Ok(mut traffic) = self.inner.session_traffic.lock()
+            && (traffic.len() < MAX_SESSION_METRICS || traffic.contains_key(&session_id))
+        {
+            let entry = traffic.entry(session_id).or_default();
+            entry.rx_packets = entry.rx_packets.saturating_add(1);
+            entry.rx_bytes = entry.rx_bytes.saturating_add(bytes);
+        }
+    }
+
+    /// Removes traffic counters when a session is closed.
+    pub fn session_closed_for(&self, session_id: SessionId) {
+        if let Ok(mut traffic) = self.inner.session_traffic.lock() {
+            traffic.remove(&session_id);
+        }
+        self.session_closed();
+    }
+
+    #[must_use]
+    pub fn session_snapshot(&self, session_id: SessionId) -> Option<SessionMetricsSnapshot> {
+        self.inner
+            .session_traffic
+            .lock()
+            .ok()
+            .and_then(|traffic| traffic.get(&session_id).copied())
+            .map(|traffic| SessionMetricsSnapshot {
+                tx_bytes: traffic.tx_bytes,
+                rx_bytes: traffic.rx_bytes,
+                tx_packets: traffic.tx_packets,
+                rx_packets: traffic.rx_packets,
+            })
     }
 
     pub fn record_authentication_failure(&self) {
@@ -117,6 +189,7 @@ impl Metrics {
 #[cfg(test)]
 mod tests {
     use super::Metrics;
+    use crate::SessionId;
     use std::sync::Arc;
     use std::thread;
 
@@ -138,6 +211,25 @@ mod tests {
         assert_eq!(metrics.snapshot().authentication_failures, 1);
         metrics.session_closed();
         assert_eq!(metrics.snapshot().active_sessions, 0);
+    }
+
+    #[test]
+    fn tracks_bounded_secret_free_session_traffic() {
+        let metrics = Metrics::default();
+        let session = SessionId::new(7).unwrap();
+        metrics.record_tx_for(session, 12);
+        metrics.record_rx_for(session, 8);
+        assert_eq!(
+            metrics.session_snapshot(session),
+            Some(super::SessionMetricsSnapshot {
+                tx_bytes: 12,
+                rx_bytes: 8,
+                tx_packets: 1,
+                rx_packets: 1,
+            })
+        );
+        metrics.session_closed_for(session);
+        assert_eq!(metrics.session_snapshot(session), None);
     }
 
     #[test]
