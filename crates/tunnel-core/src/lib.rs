@@ -44,7 +44,9 @@ pub use management::{
 #[cfg(unix)]
 pub use management_server::UnixManagementServer;
 pub use metrics::{Metrics, MetricsSnapshot};
-pub use network::{MtuBudget, NetworkConfigError, TunnelNetworkConfig};
+pub use network::{
+    LinuxNetworkPlan, MtuBudget, NetworkCommand, NetworkConfigError, TunnelNetworkConfig,
+};
 pub use noise::{NOISE_IK_PARAMS, NoiseHandshake, NoiseHandshakeError, NoiseTransport};
 pub use peer::{PeerAuthorization, PeerRegistry, PeerRegistryError, PeerSummary};
 pub use protocol::{
