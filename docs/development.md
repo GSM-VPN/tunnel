@@ -45,5 +45,17 @@ go test ./internal/protocol -fuzz=FuzzUnmarshalRequestFrameNeverPanics -fuzztime
 Fuzzing hardens parser boundaries but does not replace network integration
 tests, cryptographic review, or an independent security assessment.
 
+On Unix, the Core process can be started with:
+
+```bash
+TUNNEL_CORE_IPC_SOCKET=/tmp/gsm-tunnel-core.sock \
+TUNNEL_CORE_MAX_PEERS=216 \
+cargo run -p tunnel-core --bin tunnel-core
+```
+
+The Go Controller's `StartCore` helper passes these values to the child
+process and the existing `Supervisor` bounds restarts after crashes. The Core
+socket is local-only; data packets do not pass through the Controller.
+
 프로토콜·암호화·네트워크 기능은 각 단계의 테스트 요구사항을 충족하기 전까지 실제 사용자 트래픽에 사용하지 않습니다.
 

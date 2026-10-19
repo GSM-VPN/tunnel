@@ -8,6 +8,10 @@ description = "Rust data-plane foundation for the GSM Tunnel engine"
 [lib]
 path = "src/lib.rs"
 
+[[bin]]
+name = "tunnel-core"
+path = "src/tunnel_core_bin.rs"
+
 [lints]
 workspace = true
 
