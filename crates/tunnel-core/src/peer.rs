@@ -137,6 +137,35 @@ impl PeerRegistry {
         Ok(())
     }
 
+    /// Replaces an existing approval with a new public key and addresses.
+    ///
+    /// The replacement is atomic from the registry's perspective: if the new
+    /// authorization is invalid or conflicts with another peer, the original
+    /// authorization is restored unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PeerRegistryError::UnknownPeer`] when the peer ID is not
+    /// registered, or the same validation errors as [`Self::register`] when
+    /// the replacement is not acceptable.
+    pub fn replace(
+        &mut self,
+        peer: PeerAuthorization,
+        now: SystemTime,
+    ) -> Result<(), PeerRegistryError> {
+        let previous = self
+            .peers
+            .remove(&peer.peer_id)
+            .ok_or(PeerRegistryError::UnknownPeer)?;
+        match self.register(peer, now) {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                self.peers.insert(previous.peer_id, previous);
+                Err(error)
+            }
+        }
+    }
+
     /// Returns whether a peer is currently approved and unexpired.
     #[must_use]
     pub fn is_authorized(&self, peer_id: u64, public_key: &[u8; 32], now: SystemTime) -> bool {
@@ -255,6 +284,38 @@ mod tests {
         registry.revoke(1).unwrap();
         assert!(!registry.is_authorized(1, &key, now));
         assert!(registry.is_empty());
+    }
+
+    #[test]
+    fn replaces_a_peer_key_atomically() {
+        let now = UNIX_EPOCH;
+        let old_key = [4; 32];
+        let new_key = [5; 32];
+        let mut registry = PeerRegistry::new(1);
+        registry.register(peer(1, old_key), now).unwrap();
+
+        let mut replacement = peer(1, new_key);
+        replacement.ipv4 = Some(Ipv4Addr::new(10, 80, 0, 3));
+        registry.replace(replacement, now).unwrap();
+
+        assert!(!registry.is_authorized(1, &old_key, now));
+        assert!(registry.is_authorized(1, &new_key, now));
+    }
+
+    #[test]
+    fn failed_peer_key_replacement_restores_the_original_approval() {
+        let now = UNIX_EPOCH;
+        let old_key = [4; 32];
+        let mut registry = PeerRegistry::new(1);
+        registry.register(peer(1, old_key), now).unwrap();
+
+        let mut invalid_replacement = peer(1, [5; 32]);
+        invalid_replacement.expires_at = now;
+        assert_eq!(
+            registry.replace(invalid_replacement, now),
+            Err(PeerRegistryError::InvalidExpiry)
+        );
+        assert!(registry.is_authorized(1, &old_key, now));
     }
 
     #[test]
