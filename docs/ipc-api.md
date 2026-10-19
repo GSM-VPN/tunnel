@@ -59,3 +59,9 @@ before decoding a request. A read-only server policy leaves health,
 statistics, and session reads available while returning `403` for engine,
 peer, session mutation, and configuration operations. The default policy
 allows the Go Controller's local mutating control plane.
+
+The Go Controller's `CoreDesiredState` stores only approved peer data and
+network policy. `CoreSynchronizer` restores that state after every Core
+restart in the order `Initialize`, `UpdateConfiguration`, `RegisterPeer`, and
+`Start`; peer IDs are applied in ascending order for deterministic recovery.
+Synchronization errors prevent the Core from entering the running state.

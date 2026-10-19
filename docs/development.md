@@ -63,5 +63,12 @@ owner. `bind_with_policy(..., false)` exposes a read-only management socket
 that rejects engine, peer, session, and configuration mutations with 403;
 the default bind permits the Controller's mutating control plane.
 
+`CoreController` keeps a secret-free desired state for network configuration
+and approved peers. On every Core start or restart, `CoreSynchronizer` waits
+for the IPC socket and applies initialization, configuration, peer approvals,
+and the running transition in that order. A synchronization failure is
+treated as an unhealthy start, so the Controller does not report a partially
+restored Core as running.
+
 프로토콜·암호화·네트워크 기능은 각 단계의 테스트 요구사항을 충족하기 전까지 실제 사용자 트래픽에 사용하지 않습니다.
 

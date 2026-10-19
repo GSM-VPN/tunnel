@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/GSM-VPN/tunnel/internal/protocol"
 )
 
 func TestCoreControllerRestartsAndReportsUnhealthy(t *testing.T) {
@@ -32,6 +34,35 @@ func TestCoreControllerRestartsAndReportsUnhealthy(t *testing.T) {
 	}
 	if status.LastError == "" {
 		t.Fatal("unhealthy status did not expose a reason")
+	}
+}
+
+func TestCoreControllerSynchronizesDesiredStateBeforeRunning(t *testing.T) {
+	process := &fakeProcess{result: make(chan error)}
+	controller := newCoreController(
+		CoreCommand{BinaryPath: "core", SocketPath: "/tmp/core.sock"},
+		DefaultRestartPolicy(),
+		func(context.Context, CoreCommand) (CoreProcess, error) { return process, nil },
+	)
+	controller.ApprovePeer(protocol.PeerRegistration{PeerID: 7, UserID: "user"})
+	var synchronized atomic.Bool
+	controller.synchronize = func(_ context.Context, desired CoreDesiredState) error {
+		synchronized.Store(true)
+		if _, ok := desired.peers[7]; !ok {
+			t.Fatal("approved peer was not included in desired state")
+		}
+		return nil
+	}
+
+	if err := controller.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	waitForState(t, controller, CoreRunning)
+	if !synchronized.Load() {
+		t.Fatal("Core entered running state without synchronization")
+	}
+	if err := controller.Stop(); err != nil {
+		t.Fatal(err)
 	}
 }
 
