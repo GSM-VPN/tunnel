@@ -99,7 +99,7 @@ impl<D: TunnelDevice> PlainTunnel<D> {
                 .checked_add(1)
                 .ok_or(TunnelError::SequenceExhausted)?;
             if let Some(metrics) = &self.metrics {
-                metrics.record_tx(sent as u64);
+                metrics.record_tx_for(self.session_id, sent as u64);
             }
             Ok(sent)
         })();
@@ -131,7 +131,7 @@ impl<D: TunnelDevice> PlainTunnel<D> {
             }
             let written = self.device.write_packet(&packet.payload)?;
             if let Some(metrics) = &self.metrics {
-                metrics.record_rx(length as u64);
+                metrics.record_rx_for(self.session_id, length as u64);
             }
             Ok(written)
         })();

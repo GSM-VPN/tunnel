@@ -198,7 +198,8 @@ impl ManagementService {
                 .collect();
             for session_id in session_ids {
                 self.sessions.remove(&session_id);
-                self.metrics.session_closed();
+                self.metrics
+                    .session_closed_for(crate::SessionId(session_id));
             }
         }
     }
@@ -238,10 +239,11 @@ impl ManagementService {
         }
         match self.state {
             EngineState::Running | EngineState::Ready => {
-                let closed = self.sessions.len();
+                let session_ids: Vec<_> = self.sessions.keys().copied().collect();
                 self.sessions.clear();
-                for _ in 0..closed {
-                    self.metrics.session_closed();
+                for session_id in session_ids {
+                    self.metrics
+                        .session_closed_for(crate::SessionId(session_id));
                 }
                 self.state = EngineState::Stopped;
                 (STATUS_OK, 0, Vec::new())
@@ -295,7 +297,8 @@ impl ManagementService {
         if self.sessions.remove(&session_id).is_none() {
             return (STATUS_NOT_FOUND, 2, Vec::new());
         }
-        self.metrics.session_closed();
+        self.metrics
+            .session_closed_for(crate::SessionId(session_id));
         (STATUS_OK, 0, Vec::new())
     }
 
@@ -309,7 +312,8 @@ impl ManagementService {
             .collect();
         for session_id in session_ids {
             self.sessions.remove(&session_id);
-            self.metrics.session_closed();
+            self.metrics
+                .session_closed_for(crate::SessionId(session_id));
         }
         Ok(())
     }
