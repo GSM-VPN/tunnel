@@ -7,7 +7,14 @@ use std::time::Duration;
 pub enum TransportError {
     Closed,
     MissingRemoteEndpoint,
-    PacketTooLarge { actual: usize, maximum: usize },
+    UnexpectedRemoteEndpoint {
+        expected: SocketAddr,
+        actual: SocketAddr,
+    },
+    PacketTooLarge {
+        actual: usize,
+        maximum: usize,
+    },
     Io(io::ErrorKind),
 }
 
@@ -86,9 +93,15 @@ impl UdpTransport {
     /// [`TransportError::Io`] for timeout and other socket errors.
     pub fn receive(&self, buffer: &mut [u8]) -> Result<(usize, SocketAddr), TransportError> {
         let socket = self.socket.as_ref().ok_or(TransportError::Closed)?;
-        socket
+        let (length, actual) = socket
             .recv_from(buffer)
-            .map_err(|error| TransportError::Io(error.kind()))
+            .map_err(|error| TransportError::Io(error.kind()))?;
+        if let Some(expected) = self.remote
+            && actual != expected
+        {
+            return Err(TransportError::UnexpectedRemoteEndpoint { expected, actual });
+        }
+        Ok((length, actual))
     }
 
     /// Closes the socket. Calling close more than once is harmless.
@@ -162,5 +175,29 @@ mod tests {
         assert_eq!(transport.send(b"hello"), Err(TransportError::Closed));
         let mut buffer = [0; 1_400];
         assert_eq!(transport.receive(&mut buffer), Err(TransportError::Closed));
+    }
+
+    #[test]
+    fn rejects_datagrams_from_an_unexpected_remote_endpoint() {
+        let sender = UdpTransport::bind(loopback(), 1_400).expect("sender binds");
+        let unexpected = UdpTransport::bind(loopback(), 1_400).expect("unexpected binds");
+        let mut receiver = UdpTransport::bind(loopback(), 1_400).expect("receiver binds");
+        receiver.set_remote(unexpected.local_addr().expect("unexpected address"));
+
+        sender
+            .socket
+            .as_ref()
+            .expect("sender socket")
+            .send_to(b"spoofed", receiver.local_addr().expect("receiver address"))
+            .expect("datagram sends");
+
+        let mut buffer = [0; 1_400];
+        assert_eq!(
+            receiver.receive(&mut buffer),
+            Err(TransportError::UnexpectedRemoteEndpoint {
+                expected: unexpected.local_addr().expect("unexpected address"),
+                actual: sender.local_addr().expect("sender address"),
+            })
+        );
     }
 }
