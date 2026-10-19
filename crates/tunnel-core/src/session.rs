@@ -1,6 +1,6 @@
 //! Session lifecycle state and bounded reconnect policy.
 
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 /// Connection lifecycle states owned by the tunnel core.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -53,6 +53,36 @@ pub struct Transition {
     pub from: LifecycleState,
     pub to: LifecycleState,
     pub reconnect_delay: Option<Duration>,
+}
+
+/// Secret-free structured record for one session state transition.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SessionTransitionLog {
+    pub session_id: u32,
+    pub event: SessionEvent,
+    pub from: LifecycleState,
+    pub to: LifecycleState,
+    pub reconnect_delay: Option<Duration>,
+}
+
+/// Captures the beginning of one reconnect attempt and measures its recovery.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReconnectMeasurement {
+    started_at: SystemTime,
+}
+
+impl ReconnectMeasurement {
+    #[must_use]
+    pub const fn started_at(started_at: SystemTime) -> Self {
+        Self { started_at }
+    }
+
+    #[must_use]
+    pub fn recovered_at(self, recovered_at: SystemTime) -> Duration {
+        recovered_at
+            .duration_since(self.started_at)
+            .unwrap_or_default()
+    }
 }
 
 /// Work selected by the session timer for an established session.
@@ -229,6 +259,28 @@ impl SessionMachine {
         })
     }
 
+    /// Applies an event and returns a log-safe record for the session.
+    ///
+    /// The record contains no key material, payload, or user identifier.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same transition error as [`Self::apply`].
+    pub fn apply_with_log(
+        &mut self,
+        session_id: u32,
+        event: SessionEvent,
+    ) -> Result<SessionTransitionLog, SessionError> {
+        let transition = self.apply(event)?;
+        Ok(SessionTransitionLog {
+            session_id,
+            event,
+            from: transition.from,
+            to: transition.to,
+            reconnect_delay: transition.reconnect_delay,
+        })
+    }
+
     fn next_retry_delay(&self) -> Result<Duration, SessionError> {
         if self.reconnect_attempts >= self.policy.max_reconnect_attempts {
             return Err(SessionError::RetryLimitReached);
@@ -264,6 +316,28 @@ mod tests {
         assert_eq!(session.state(), LifecycleState::Established);
         assert_eq!(session.reconnect_attempts(), 0);
         assert_eq!(session.handshake_attempts(), 0);
+    }
+
+    #[test]
+    fn emits_secret_free_transition_logs_and_recovery_duration() {
+        let mut session = SessionMachine::new(SessionPolicy::default());
+        let log = session
+            .apply_with_log(7, SessionEvent::ConnectRequested)
+            .expect("connect transition");
+        assert_eq!(log.session_id, 7);
+        assert_eq!(log.from, LifecycleState::Disconnected);
+        assert_eq!(log.to, LifecycleState::Connecting);
+
+        let measurement =
+            ReconnectMeasurement::started_at(SystemTime::UNIX_EPOCH + Duration::from_secs(10));
+        assert_eq!(
+            measurement.recovered_at(SystemTime::UNIX_EPOCH + Duration::from_secs(13)),
+            Duration::from_secs(3)
+        );
+        assert_eq!(
+            measurement.recovered_at(SystemTime::UNIX_EPOCH + Duration::from_secs(9)),
+            Duration::ZERO
+        );
     }
 
     #[test]
