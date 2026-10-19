@@ -33,5 +33,17 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-targets --all-features
 ```
 
+Rust packet parsing includes property tests over arbitrary byte sequences, and
+the Go management codec exposes fuzz targets for bounded local campaigns:
+
+```bash
+cargo test --workspace --all-targets --all-features
+go test ./... -run '^$'
+go test ./internal/protocol -fuzz=FuzzUnmarshalRequestFrameNeverPanics -fuzztime=30s
+```
+
+Fuzzing hardens parser boundaries but does not replace network integration
+tests, cryptographic review, or an independent security assessment.
+
 프로토콜·암호화·네트워크 기능은 각 단계의 테스트 요구사항을 충족하기 전까지 실제 사용자 트래픽에 사용하지 않습니다.
 
