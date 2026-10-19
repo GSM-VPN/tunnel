@@ -100,14 +100,15 @@ fn peer_is_owner(stream: &UnixStream, owner_uid: u32) -> io::Result<bool> {
     use std::{mem::MaybeUninit, os::fd::AsRawFd};
 
     let mut credentials = MaybeUninit::<libc::ucred>::zeroed();
-    let mut length = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+    let mut length = libc::socklen_t::try_from(std::mem::size_of::<libc::ucred>())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "credential size overflow"))?;
     let result = unsafe {
         libc::getsockopt(
             stream.as_raw_fd(),
             libc::SOL_SOCKET,
             libc::SO_PEERCRED,
             credentials.as_mut_ptr().cast(),
-            &mut length,
+            &raw mut length,
         )
     };
     if result != 0 {
