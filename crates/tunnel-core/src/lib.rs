@@ -17,6 +17,7 @@ mod key_rotation;
 mod management;
 mod metrics;
 mod noise;
+mod peer;
 
 pub use codec::{TunnelHeader, TunnelPacket};
 pub use crypto::{CryptoError, ReplayWindow, SessionCipher};
@@ -35,6 +36,7 @@ pub use management::{
 };
 pub use metrics::{Metrics, MetricsSnapshot};
 pub use noise::{NOISE_IK_PARAMS, NoiseHandshake, NoiseHandshakeError, NoiseTransport};
+pub use peer::{PeerAuthorization, PeerRegistry, PeerRegistryError, PeerSummary};
 pub use protocol::{
     AEAD_TAG_SIZE, KeyGeneration, MAX_ENCRYPTED_PAYLOAD_SIZE, MAX_PACKET_SIZE, MAX_PAYLOAD_SIZE,
     PROTOCOL_NAME, PROTOCOL_VERSION, PacketType, ProtocolError, ProtocolVersion, SequenceNumber,
