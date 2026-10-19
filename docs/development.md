@@ -104,6 +104,10 @@ tests assert the record shape and the established-state value.
 adapter. A failed query advances to the next provider and wraps around after
 the last one; a successful query keeps the current provider selected. The
 selector stores no query names, response bodies, or user-specific history.
+The current Core has no DNS response cache, so it cannot retain an arbitrary or
+indefinite result for censorship-avoidance purposes. It exposes only the
+validated policy cursor; any future TTL cache must add bounded expiry and a
+separate privacy review before activation.
 
 `PeerRateLimiter` owns an independent bounded window per peer. Exhausting one
 peer's packet allowance does not consume another peer's allowance; the shared
@@ -124,7 +128,9 @@ initialization; it does not discover or persist a second copy of the secret.
 Linux 적용 계층에서는 `resolvectl`의 UDP/TCP 53 transport만 실행한다. DoT와
 DoH는 설정 모델에 보존할 수 있지만 별도 resolver adapter가 준비되기 전에는
 활성화하지 않는다. 적용 전 `DnsSnapshot`을 보관하고 연결 종료나 실패 시
-원래 link·resolver 설정을 역순으로 복원한다.
+원래 link·resolver 설정을 역순으로 복원한다. Core는 DNS 질의 원문이나
+사용자별 DNS 기록을 영구 저장하지 않으며, 장애 분석에 필요한 운영 정보도
+정책 주소와 선택 cursor 수준으로 제한한다.
 
 운영 배포에서는 VPN Server/Go Controller와 Rust Core를 전용 서비스 계정으로
 실행하고, TUN·routing·nftables처럼 `CAP_NET_ADMIN`이 필요한 작업은 좁은
