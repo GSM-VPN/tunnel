@@ -128,7 +128,7 @@ impl ManagementService {
                 Ok(()) => (STATUS_OK, 0, Vec::new()),
                 Err(status) => (status, 2, Vec::new()),
             },
-            OPERATION_GET_HEALTH => (STATUS_OK, 0, b"healthy".to_vec()),
+            OPERATION_GET_HEALTH => self.health(),
             OPERATION_GET_STATISTICS => (STATUS_OK, 0, encode_metrics(&self.metrics)),
             OPERATION_CREATE_SESSION => self.create_session(&request.payload, now),
             OPERATION_TERMINATE_SESSION => self.terminate_session(&request.payload),
@@ -189,9 +189,10 @@ impl ManagementService {
                 self.state = EngineState::Running;
                 (STATUS_OK, 0, Vec::new())
             }
-            EngineState::Uninitialized => (STATUS_UNAVAILABLE, 5, Vec::new()),
+            EngineState::Uninitialized | EngineState::Stopped => {
+                (STATUS_UNAVAILABLE, 5, Vec::new())
+            }
             EngineState::Running => (STATUS_CONFLICT, 4, Vec::new()),
-            EngineState::Stopped => (STATUS_UNAVAILABLE, 5, Vec::new()),
         }
     }
 
@@ -271,8 +272,18 @@ impl ManagementService {
                 Ok(_) => (STATUS_CONFLICT, 4, Vec::new()),
                 Err(_) => (STATUS_BAD_REQUEST, 6, Vec::new()),
             },
-            Err(_) => (STATUS_BAD_REQUEST, 6, Vec::new()),
+            Err(()) => (STATUS_BAD_REQUEST, 6, Vec::new()),
         }
+    }
+
+    fn health(&self) -> (u16, u16, Vec<u8>) {
+        let (status, label) = match self.state {
+            EngineState::Running => (STATUS_OK, "running"),
+            EngineState::Ready => (STATUS_OK, "ready"),
+            EngineState::Stopped => (STATUS_UNAVAILABLE, "stopped"),
+            EngineState::Uninitialized => (STATUS_UNAVAILABLE, "uninitialized"),
+        };
+        (status, 0, label.as_bytes().to_vec())
     }
 }
 
@@ -326,12 +337,13 @@ fn decode_configuration(payload: &[u8]) -> Result<TunnelNetworkConfig, ()> {
     if ipv4_prefix != 16 || ipv6_prefix != 64 || payload[8..10] != [0, 0] {
         return Err(());
     }
-    let mut config = TunnelNetworkConfig::default();
-    config.udp_port = udp_port;
-    config.mtu = usize::from(mtu);
-    config.dual_stack = dual_stack;
-    config.kill_switch = kill_switch;
-    Ok(config)
+    Ok(TunnelNetworkConfig {
+        udp_port,
+        mtu: usize::from(mtu),
+        dual_stack,
+        kill_switch,
+        ..TunnelNetworkConfig::default()
+    })
 }
 
 fn status_for_peer_error(error: &PeerRegistryError) -> u16 {
