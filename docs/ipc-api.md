@@ -65,3 +65,9 @@ network policy. `CoreSynchronizer` restores that state after every Core
 restart in the order `Initialize`, `UpdateConfiguration`, `RegisterPeer`, and
 `Start`; peer IDs are applied in ascending order for deterministic recovery.
 Synchronization errors prevent the Core from entering the running state.
+
+`CoreController.CollectMetrics` exposes a combined operational snapshot by
+calling `GetHealth` and `GetStatistics` over separate local IPC connections.
+The health label and all eleven counters remain aggregate and secret-free;
+Core availability or IPC errors are returned to the caller instead of being
+silently converted into zero-valued metrics.

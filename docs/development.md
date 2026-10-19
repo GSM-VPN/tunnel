@@ -70,5 +70,11 @@ and the running transition in that order. A synchronization failure is
 treated as an unhealthy start, so the Controller does not report a partially
 restored Core as running.
 
+For operations, `CoreController.CollectMetrics` combines the Core health label
+with the eleven secret-free counters returned by `GetStatistics`. It refuses
+to query a stopped or unhealthy Core and uses consecutive request IDs for the
+two IPC calls. The snapshot contains no keys, plaintext packets, DNS query
+contents, or per-user identity data.
+
 프로토콜·암호화·네트워크 기능은 각 단계의 테스트 요구사항을 충족하기 전까지 실제 사용자 트래픽에 사용하지 않습니다.
 
