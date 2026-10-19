@@ -99,6 +99,11 @@ VPN Server 승인 연동은 [`vpn-server-integration.md`](./vpn-server-integrati
 HMAC 서명만 받고, 로그인 API나 `GATEWAY_SHARED_SECRET` 원문을 Rust Core에
 전달하지 않는다.
 
+키 변경 운영 절차는 [`key-lifecycle.md`](./key-lifecycle.md)에 따른다.
+Gateway shared secret 교체는 Controller 서비스 인증 재시작으로 처리하고,
+Server private key 교체는 기존 Core 세션을 종료한 뒤 새 장기 신원으로 Core를
+재시작한다. 두 변경을 하나의 무중단 롤링 절차로 합치지 않는다.
+
 `ListSessions` is the peer-level connection status boundary. Each returned
 13-byte record contains `session_id`, `peer_id`, and the lifecycle state code;
 it does not include keys, packet contents, or user profile data. The Controller

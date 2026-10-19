@@ -48,6 +48,12 @@ include it in Core IPC payloads.
 The Core validates `SERVER_PRIVATE_KEY` before binding its management socket;
 a missing or malformed key prevents startup.
 
+The separate change and restart procedures for the Gateway service secret and
+the Core server identity are documented in [`key-lifecycle.md`](key-lifecycle.md).
+The service secret change restarts only the Controller authentication boundary;
+the server identity change drains sessions, replaces the Core process, and
+requires clients to pin and verify the new public key before reconnecting.
+
 Session cipher keys use `zeroize`-backed storage: the previous generation is
 cleared before replacement, and the active key is cleared when the cipher is
 dropped. The long-term server private key and the temporary key-parsing buffer

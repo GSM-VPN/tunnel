@@ -93,7 +93,7 @@ Offset  Size  Field
 - [x] 키 로딩 실패 또는 공개키 파생 실패 시 Tunnel Server를 시작하지 않음
 - [x] 두 비밀값 모두 로그·IPC 상태 조회·메트릭에 노출하지 않음
 - [x] 비밀값은 환경 변수 또는 기존 `vpn-server`의 비밀값 공급 방식을 사용
-- [ ] Secret 변경과 Server Private Key 변경의 롤링·재시작 정책을 별도로 정의
+- [x] Secret 변경과 Server Private Key 변경의 롤링·재시작 정책을 별도로 정의
 
 인증 경계는 다음과 같이 유지한다.
 
@@ -388,7 +388,7 @@ Windows/Wintun
 - [x] `docs/security-design.md` 작성
 - [x] `docs/session-state-machine.md` 작성
 - [x] `docs/ipc-api.md` 작성
-- [ ] 결정 사항을 `SPEC.md`의 미확정 항목에 반영
+- [x] 결정 사항을 `SPEC.md`의 미확정 항목에 반영
 - [ ] 암호화 설계에 대한 별도 검토 수행
 
 ---
