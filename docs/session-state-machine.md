@@ -28,6 +28,11 @@ instead of reusing the previous data-key generation. None of these paths
 enter an unbounded retry loop. Successful handshakes reset both handshake and
 reconnect attempts; reaching the handshake limit enters `CLOSING`.
 
+The session tests assert that `RetryRequested` is invalid after authentication
+failure, permission revocation, and rekey failure. Key-purge behavior remains
+a separate management operation and is not implied by this state-machine
+guarantee.
+
 The management `TerminateSession` operation is a connection-level close: it
 removes only the selected session and leaves the peer's long-term approval in
 the authorization registry. The same authorized peer can therefore create a
