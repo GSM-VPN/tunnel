@@ -77,6 +77,42 @@ func (client Client) RemovePeer(requestID uint64, peerID uint64) (protocol.Manag
 	})
 }
 
+func (client Client) Initialize(requestID uint64) (protocol.ManagementResponse, error) {
+	return client.callSuccessful(protocol.ManagementRequest{Version: protocol.ManagementVersion, RequestID: requestID, Operation: protocol.OperationInitialize})
+}
+
+func (client Client) Start(requestID uint64) (protocol.ManagementResponse, error) {
+	return client.callSuccessful(protocol.ManagementRequest{Version: protocol.ManagementVersion, RequestID: requestID, Operation: protocol.OperationStart})
+}
+
+func (client Client) Stop(requestID uint64) (protocol.ManagementResponse, error) {
+	return client.callSuccessful(protocol.ManagementRequest{Version: protocol.ManagementVersion, RequestID: requestID, Operation: protocol.OperationStop})
+}
+
+func (client Client) CreateSession(requestID uint64, session protocol.SessionRequest) (protocol.SessionStatus, error) {
+	response, err := client.callSuccessful(protocol.ManagementRequest{Version: protocol.ManagementVersion, RequestID: requestID, Operation: protocol.OperationCreateSession, Payload: session.MarshalBinary()})
+	if err != nil {
+		return protocol.SessionStatus{}, err
+	}
+	return protocol.UnmarshalSessionStatus(response.Payload)
+}
+
+func (client Client) GetSession(requestID uint64, sessionID uint32) (protocol.SessionStatus, error) {
+	response, err := client.callSuccessful(protocol.ManagementRequest{Version: protocol.ManagementVersion, RequestID: requestID, Operation: protocol.OperationGetSession, Payload: (protocol.SessionRequest{SessionID: sessionID}).MarshalBinary()})
+	if err != nil {
+		return protocol.SessionStatus{}, err
+	}
+	return protocol.UnmarshalSessionStatus(response.Payload)
+}
+
+func (client Client) TerminateSession(requestID uint64, sessionID uint32) (protocol.ManagementResponse, error) {
+	return client.callSuccessful(protocol.ManagementRequest{Version: protocol.ManagementVersion, RequestID: requestID, Operation: protocol.OperationTerminateSession, Payload: (protocol.SessionRequest{SessionID: sessionID}).MarshalBinary()})
+}
+
+func (client Client) UpdateConfiguration(requestID uint64, configuration protocol.NetworkConfiguration) (protocol.ManagementResponse, error) {
+	return client.callSuccessful(protocol.ManagementRequest{Version: protocol.ManagementVersion, RequestID: requestID, Operation: protocol.OperationUpdateConfiguration, Payload: configuration.MarshalBinary()})
+}
+
 func (client Client) callSuccessful(request protocol.ManagementRequest) (protocol.ManagementResponse, error) {
 	response, err := client.Call(request)
 	if err != nil {

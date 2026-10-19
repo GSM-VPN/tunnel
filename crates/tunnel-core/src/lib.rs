@@ -30,6 +30,7 @@ pub use engine::{PlainTunnel, TunnelError};
 pub use key_rotation::{KeyRotationPolicy, RotationReason};
 #[cfg(target_os = "linux")]
 pub use linux_device::LinuxTunDevice;
+pub use management::{EngineState, ManagedSession};
 pub use management::{
     MAX_MANAGEMENT_FRAME_SIZE, ManagementError, ManagementRequest, ManagementResponse,
     ManagementService, OPERATION_CREATE_SESSION, OPERATION_GET_HEALTH, OPERATION_GET_SESSION,
@@ -37,7 +38,8 @@ pub use management::{
     OPERATION_REGISTER_PEER, OPERATION_REMOVE_PEER, OPERATION_START, OPERATION_STOP,
     OPERATION_TERMINATE_SESSION, OPERATION_UPDATE_CONFIGURATION, PeerRegistrationPayload,
     STATUS_BAD_REQUEST, STATUS_CONFLICT, STATUS_NOT_FOUND, STATUS_NOT_IMPLEMENTED, STATUS_OK,
-    decode_peer_registration, decode_peer_removal, encode_peer_registration, encode_peer_removal,
+    STATUS_UNAVAILABLE, decode_peer_registration, decode_peer_removal, encode_peer_registration,
+    encode_peer_removal,
 };
 #[cfg(unix)]
 pub use management_server::UnixManagementServer;

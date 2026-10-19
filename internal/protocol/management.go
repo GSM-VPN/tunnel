@@ -16,6 +16,8 @@ const (
 	MaxManagementFrameSize    = 1 << 20
 )
 
+const managementSessionPayloadSize = 12
+
 var (
 	ErrManagementFrameTooLarge  = errors.New("management frame exceeds maximum size")
 	ErrManagementFrameMalformed = errors.New("malformed management frame")
@@ -60,6 +62,60 @@ type ManagementResponse struct {
 	Status    uint16
 	ErrorCode uint16
 	Payload   []byte
+}
+
+// SessionRequest identifies a peer session for create, get, and terminate operations.
+type SessionRequest struct {
+	SessionID uint32
+	PeerID    uint64
+}
+
+// SessionStatus is the non-secret session state returned by the Core.
+type SessionStatus struct {
+	SessionID uint32
+	PeerID    uint64
+	State     byte
+}
+
+// NetworkConfiguration contains the mutable network policy accepted by Core.
+type NetworkConfiguration struct {
+	UDPPort    uint16
+	MTU        uint16
+	DualStack  bool
+	KillSwitch bool
+}
+
+func (configuration NetworkConfiguration) MarshalBinary() []byte {
+	payload := make([]byte, 10)
+	payload[0] = 16 // IPv4 network is fixed at 10.80.0.0/16.
+	payload[1] = 64 // IPv6 network is fixed at fd80:1234:5678::/64.
+	binary.BigEndian.PutUint16(payload[2:4], configuration.UDPPort)
+	binary.BigEndian.PutUint16(payload[4:6], configuration.MTU)
+	if configuration.DualStack {
+		payload[6] = 1
+	}
+	if configuration.KillSwitch {
+		payload[7] = 1
+	}
+	return payload
+}
+
+func (request SessionRequest) MarshalBinary() []byte {
+	payload := make([]byte, managementSessionPayloadSize)
+	binary.BigEndian.PutUint32(payload[0:4], request.SessionID)
+	binary.BigEndian.PutUint64(payload[4:12], request.PeerID)
+	return payload
+}
+
+func UnmarshalSessionStatus(payload []byte) (SessionStatus, error) {
+	if len(payload) != managementSessionPayloadSize+1 {
+		return SessionStatus{}, fmt.Errorf("invalid session status length: %d", len(payload))
+	}
+	return SessionStatus{
+		SessionID: binary.BigEndian.Uint32(payload[0:4]),
+		PeerID:    binary.BigEndian.Uint64(payload[4:12]),
+		State:     payload[12],
+	}, nil
 }
 
 // MarshalFrame encodes a request with a four-byte big-endian frame length.
