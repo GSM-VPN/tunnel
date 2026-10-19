@@ -21,9 +21,11 @@ the idle limit. A successful keepalive does not change the established state;
 an explicit handshake timeout follows the same bounded reconnect path as
 other handshake failures.
 
-Authentication failure, permission revocation, and server shutdown enter
-`CLOSING`; they do not enter an unbounded retry loop. Explicit close is valid
-from active states. Successful handshakes reset reconnect attempts.
+Authentication failure, permission revocation, server shutdown, and an
+explicit close enter `CLOSING` from every non-terminal state, including a
+session that is still reconnecting. A failed rekey also enters `CLOSING`
+instead of reusing the previous data-key generation. None of these paths
+enter an unbounded retry loop. Successful handshakes reset reconnect attempts.
 
 The encrypted data path exposes a rekey boundary for authenticated
 handshake results. A replacement must use a strictly newer key generation and
