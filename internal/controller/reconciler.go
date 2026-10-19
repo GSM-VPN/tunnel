@@ -65,7 +65,6 @@ type CoreSynchronizer struct {
 	Client       Client
 	SocketWait   time.Duration
 	PollInterval time.Duration
-	Now          func() time.Time
 }
 
 // Synchronize waits for the Core socket and restores initialization, network
@@ -139,6 +138,5 @@ func (generator *requestIDGenerator) Next() uint64 {
 }
 
 func clonePeer(peer protocol.PeerRegistration) protocol.PeerRegistration {
-	peer.UserID = string([]byte(peer.UserID))
 	return peer
 }
