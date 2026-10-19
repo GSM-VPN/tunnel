@@ -982,6 +982,17 @@ mod tests {
         );
         assert_eq!(created.status, STATUS_OK);
         assert_eq!(created.payload.len(), SESSION_PAYLOAD_SIZE + 1);
+        assert_eq!(
+            created.payload,
+            [
+                0, 0, 0, 9, // session_id
+                0, 0, 0, 0, 0, 0, 0, 7, // peer_id
+                3, // Established
+            ]
+        );
+        let listed = service.handle(&request(OPERATION_LIST_SESSIONS, Vec::new()), UNIX_EPOCH);
+        assert_eq!(listed.status, STATUS_OK);
+        assert_eq!(listed.payload, created.payload);
         let mut duplicate_session = Vec::new();
         duplicate_session.extend_from_slice(&10_u32.to_be_bytes());
         duplicate_session.extend_from_slice(&7_u64.to_be_bytes());
