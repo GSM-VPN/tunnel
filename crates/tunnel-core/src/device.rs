@@ -47,6 +47,7 @@ struct MemoryState {
 }
 
 /// In-memory endpoint used for deterministic device and tunnel tests.
+#[derive(Clone)]
 pub struct MemoryDevice {
     input: Arc<Mutex<MemoryState>>,
     output: Arc<Mutex<MemoryState>>,
@@ -82,6 +83,27 @@ impl MemoryDevice {
         state: &Mutex<MemoryState>,
     ) -> Result<std::sync::MutexGuard<'_, MemoryState>, DeviceError> {
         state.lock().map_err(|_| DeviceError::Poisoned)
+    }
+
+    /// Injects a packet into the endpoint's read queue for application tests.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DeviceError::Closed`] when the endpoint is closed or
+    /// [`DeviceError::PacketTooLarge`] when the packet exceeds the MTU.
+    pub fn inject(&mut self, packet: &[u8]) -> Result<usize, DeviceError> {
+        let mut state = Self::lock(&self.input)?;
+        if state.closed {
+            return Err(DeviceError::Closed);
+        }
+        if packet.len() > state.mtu {
+            return Err(DeviceError::PacketTooLarge {
+                actual: packet.len(),
+                mtu: state.mtu,
+            });
+        }
+        state.queue.push_back(packet.to_vec());
+        Ok(packet.len())
     }
 }
 

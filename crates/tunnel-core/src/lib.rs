@@ -2,6 +2,7 @@
 
 mod codec;
 mod device;
+mod engine;
 mod protocol;
 mod transport;
 
@@ -10,6 +11,7 @@ mod linux_device;
 
 pub use codec::{TunnelHeader, TunnelPacket};
 pub use device::{DeviceError, MemoryDevice, TunnelDevice};
+pub use engine::{PlainTunnel, TunnelError};
 #[cfg(target_os = "linux")]
 pub use linux_device::LinuxTunDevice;
 pub use protocol::{
