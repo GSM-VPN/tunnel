@@ -59,6 +59,21 @@ interface and emits address setup before routing, followed by reverse cleanup.
 It is still a command planner; applying the commands and restoring a route
 snapshot belong to the privileged platform adapter.
 
+`LinuxRouteSnapshot` captures the pre-VPN IPv4/IPv6 default routes and the
+physical Endpoint route. `LinuxClientRoutePlan::cleanup_commands_with_snapshot`
+removes the VPN routes first, then restores only the validated snapshot entries.
+The snapshot is rejected when its gateway family does not match its route or
+when an IPv6 route is supplied to an IPv4-only plan. This makes restoration
+replayable after an interrupted cleanup without allowing arbitrary command
+arguments into the planner.
+
+`LinuxKillSwitchPlan` emits an optional nftables output chain with a default
+drop policy. Loopback, tunnel-interface traffic, established/related
+traffic, and the VPN UDP Endpoint through the physical interface are allowed.
+Rollback deletes the dedicated nftables table. The plan does not execute
+firewall changes; the privileged adapter must apply it atomically and retain
+the rollback command for abnormal termination recovery.
+
 `ClientAddressPool` allocates paired client addresses starting at
 `10.80.0.2` and `fd80:1234:5678::2`, skips the server and network/broadcast
 addresses, and releases both families as one unit. Capacity exhaustion is

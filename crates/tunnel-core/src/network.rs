@@ -46,6 +46,7 @@ pub enum NetworkConfigError {
     EndpointGatewayFamilyMismatch,
     ClientIpv4OutsideNetwork,
     ClientIpv6OutsideNetwork,
+    InvalidRouteSnapshot,
 }
 
 /// One argv-safe command emitted by the privileged Linux network adapter.
@@ -62,6 +63,185 @@ impl NetworkCommand {
             args: args.into_iter().collect(),
         }
     }
+}
+
+/// One previously existing route captured by the privileged platform layer.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LinuxRouteState {
+    pub gateway: IpAddr,
+    pub device: String,
+}
+
+impl LinuxRouteState {
+    /// Creates a route snapshot entry without executing a route lookup.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the device name cannot be safely passed to an
+    /// argv-based Linux command.
+    pub fn new(gateway: IpAddr, device: impl Into<String>) -> Result<Self, NetworkConfigError> {
+        let device = device.into();
+        if !valid_interface_name(&device) {
+            return Err(NetworkConfigError::InvalidInterfaceName);
+        }
+        Ok(Self { gateway, device })
+    }
+}
+
+/// Pre-VPN routes that must be restored when the client disconnects.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct LinuxRouteSnapshot {
+    pub ipv4_default: Option<LinuxRouteState>,
+    pub ipv6_default: Option<LinuxRouteState>,
+    pub endpoint: Option<LinuxRouteState>,
+}
+
+impl LinuxRouteSnapshot {
+    /// Validates a snapshot captured by the privileged platform layer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a route gateway has the wrong address family for
+    /// the route it is intended to restore.
+    pub fn validate_for(
+        &self,
+        endpoint: SocketAddr,
+        dual_stack: bool,
+    ) -> Result<(), NetworkConfigError> {
+        if self
+            .ipv4_default
+            .as_ref()
+            .is_some_and(|route| !route.gateway.is_ipv4())
+            || self
+                .ipv6_default
+                .as_ref()
+                .is_some_and(|route| !route.gateway.is_ipv6())
+            || self
+                .endpoint
+                .as_ref()
+                .is_some_and(|route| route.gateway.is_ipv4() != endpoint.ip().is_ipv4())
+            || (!dual_stack && self.ipv6_default.is_some())
+        {
+            return Err(NetworkConfigError::InvalidRouteSnapshot);
+        }
+        Ok(())
+    }
+}
+
+/// Optional nftables policy that prevents traffic from bypassing the tunnel.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LinuxKillSwitchPlan {
+    pub tunnel_interface: String,
+    pub physical_interface: String,
+    pub endpoint: SocketAddr,
+}
+
+impl LinuxKillSwitchPlan {
+    /// Creates a Kill Switch plan without changing host firewall state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when an interface name is invalid or the endpoint port
+    /// is zero.
+    pub fn new(
+        tunnel_interface: impl Into<String>,
+        physical_interface: impl Into<String>,
+        endpoint: SocketAddr,
+    ) -> Result<Self, NetworkConfigError> {
+        let tunnel_interface = tunnel_interface.into();
+        let physical_interface = physical_interface.into();
+        if !valid_interface_name(&tunnel_interface) || !valid_interface_name(&physical_interface) {
+            return Err(NetworkConfigError::InvalidInterfaceName);
+        }
+        if endpoint.port() == 0 {
+            return Err(NetworkConfigError::InvalidUdpPort);
+        }
+        Ok(Self {
+            tunnel_interface,
+            physical_interface,
+            endpoint,
+        })
+    }
+
+    #[must_use]
+    pub fn apply_commands(&self) -> Vec<NetworkCommand> {
+        let mut commands = vec![
+            NetworkCommand::new(
+                "nft",
+                [
+                    "add".to_owned(),
+                    "table".to_owned(),
+                    "inet".to_owned(),
+                    "gsm_tunnel_killswitch".to_owned(),
+                ],
+            ),
+            NetworkCommand::new(
+                "nft",
+                [
+                    "add".to_owned(),
+                    "chain".to_owned(),
+                    "inet".to_owned(),
+                    "gsm_tunnel_killswitch".to_owned(),
+                    "output".to_owned(),
+                    "{".to_owned(),
+                    "type".to_owned(),
+                    "filter".to_owned(),
+                    "hook".to_owned(),
+                    "output".to_owned(),
+                    "priority".to_owned(),
+                    "0;".to_owned(),
+                    "policy".to_owned(),
+                    "drop;".to_owned(),
+                    "}".to_owned(),
+                ],
+            ),
+            nft_output_rule(["oifname", "lo", "accept"]),
+            nft_output_rule(["oifname", &self.tunnel_interface, "accept"]),
+            nft_output_rule(["ct", "state", "established,related", "accept"]),
+        ];
+        let family = if self.endpoint.ip().is_ipv4() {
+            "ip"
+        } else {
+            "ip6"
+        };
+        commands.push(nft_output_rule([
+            family,
+            "daddr",
+            &self.endpoint.ip().to_string(),
+            "oifname",
+            &self.physical_interface,
+            "udp",
+            "dport",
+            &self.endpoint.port().to_string(),
+            "accept",
+        ]));
+        commands
+    }
+
+    #[must_use]
+    pub fn rollback_commands(&self) -> Vec<NetworkCommand> {
+        vec![NetworkCommand::new(
+            "nft",
+            [
+                "delete".to_owned(),
+                "table".to_owned(),
+                "inet".to_owned(),
+                "gsm_tunnel_killswitch".to_owned(),
+            ],
+        )]
+    }
+}
+
+fn nft_output_rule(args: impl IntoIterator<Item = impl Into<String>>) -> NetworkCommand {
+    let mut command_args = vec![
+        "add".to_owned(),
+        "rule".to_owned(),
+        "inet".to_owned(),
+        "gsm_tunnel_killswitch".to_owned(),
+        "output".to_owned(),
+    ];
+    command_args.extend(args.into_iter().map(Into::into));
+    NetworkCommand::new("nft", command_args)
 }
 
 /// Validated Linux server network setup and rollback plan.
@@ -322,6 +502,59 @@ impl LinuxClientRoutePlan {
         commands.push(NetworkCommand::new("ip", endpoint_args));
         commands
     }
+
+    /// Removes VPN routes and restores the captured pre-VPN route state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the snapshot contains a route from the wrong
+    /// address family or an IPv6 route for an IPv4-only plan.
+    pub fn cleanup_commands_with_snapshot(
+        &self,
+        snapshot: &LinuxRouteSnapshot,
+    ) -> Result<Vec<NetworkCommand>, NetworkConfigError> {
+        snapshot.validate_for(self.endpoint, self.config.dual_stack)?;
+        let mut commands = self.cleanup_commands();
+        if let Some(route) = &snapshot.ipv4_default {
+            commands.push(route_replace_command(None, "default", route));
+        }
+        if let Some(route) = &snapshot.ipv6_default {
+            commands.push(route_replace_command(Some("-6"), "default", route));
+        }
+        if let Some(route) = &snapshot.endpoint {
+            let endpoint = match self.endpoint.ip() {
+                IpAddr::V4(address) => format!("{address}/32"),
+                IpAddr::V6(address) => format!("{address}/128"),
+            };
+            let family = if self.endpoint.ip().is_ipv4() {
+                None
+            } else {
+                Some("-6")
+            };
+            commands.push(route_replace_command(family, &endpoint, route));
+        }
+        Ok(commands)
+    }
+}
+
+fn route_replace_command(
+    family: Option<&str>,
+    destination: &str,
+    route: &LinuxRouteState,
+) -> NetworkCommand {
+    let mut args = vec![
+        "route".to_owned(),
+        "replace".to_owned(),
+        destination.to_owned(),
+        "via".to_owned(),
+        route.gateway.to_string(),
+        "dev".to_owned(),
+        route.device.clone(),
+    ];
+    if let Some(family) = family {
+        args.insert(0, family.to_owned());
+    }
+    NetworkCommand::new("ip", args)
 }
 
 impl LinuxNetworkPlan {
@@ -639,8 +872,8 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
     use super::{
-        LinuxClientNetworkPlan, LinuxClientRoutePlan, LinuxNetworkPlan, MtuBudget,
-        NetworkConfigError, TunnelNetworkConfig,
+        LinuxClientNetworkPlan, LinuxClientRoutePlan, LinuxKillSwitchPlan, LinuxNetworkPlan,
+        LinuxRouteSnapshot, LinuxRouteState, MtuBudget, NetworkConfigError, TunnelNetworkConfig,
     };
 
     #[test]
@@ -804,6 +1037,106 @@ mod tests {
                 .any(|command| { command.args.first() == Some(&"-6".to_owned()) })
         );
         assert_eq!(plan.cleanup_commands().len(), 3);
+    }
+
+    #[test]
+    fn restores_captured_routes_after_removing_vpn_routes() {
+        let plan = LinuxClientRoutePlan::new(
+            "gsm0",
+            "eth0",
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+            IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
+            TunnelNetworkConfig::default(),
+        )
+        .unwrap();
+        let snapshot = LinuxRouteSnapshot {
+            ipv4_default: Some(
+                LinuxRouteState::new(IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)), "eth0").unwrap(),
+            ),
+            ipv6_default: Some(
+                LinuxRouteState::new(IpAddr::V6("2001:db8::1".parse().unwrap()), "eth0").unwrap(),
+            ),
+            endpoint: Some(
+                LinuxRouteState::new(IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)), "eth0").unwrap(),
+            ),
+        };
+        let commands = plan.cleanup_commands_with_snapshot(&snapshot).unwrap();
+        assert_eq!(commands.len(), 6);
+        assert!(commands.iter().any(|command| {
+            command.args
+                == vec![
+                    "route",
+                    "replace",
+                    "default",
+                    "via",
+                    "192.0.2.1",
+                    "dev",
+                    "eth0",
+                ]
+        }));
+        assert!(commands.iter().any(|command| {
+            command.args
+                == vec![
+                    "-6",
+                    "route",
+                    "replace",
+                    "default",
+                    "via",
+                    "2001:db8::1",
+                    "dev",
+                    "eth0",
+                ]
+        }));
+    }
+
+    #[test]
+    fn rejects_route_snapshot_family_mismatch() {
+        let plan = LinuxClientRoutePlan::new(
+            "gsm0",
+            "eth0",
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+            IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
+            TunnelNetworkConfig::default(),
+        )
+        .unwrap();
+        let snapshot = LinuxRouteSnapshot {
+            ipv4_default: Some(
+                LinuxRouteState::new(IpAddr::V6(Ipv6Addr::LOCALHOST), "eth0").unwrap(),
+            ),
+            ..LinuxRouteSnapshot::default()
+        };
+        assert_eq!(
+            plan.cleanup_commands_with_snapshot(&snapshot),
+            Err(NetworkConfigError::InvalidRouteSnapshot)
+        );
+    }
+
+    #[test]
+    fn builds_kill_switch_with_endpoint_exception_and_rollback() {
+        let plan = LinuxKillSwitchPlan::new(
+            "gsm0",
+            "eth0",
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+        )
+        .unwrap();
+        let commands = plan.apply_commands();
+        assert!(commands.iter().any(|command| {
+            command
+                .args
+                .windows(3)
+                .any(|window| window == ["oifname", "gsm0", "accept"])
+        }));
+        assert!(commands.iter().any(|command| {
+            command
+                .args
+                .iter()
+                .any(|argument| argument == "203.0.113.10")
+                && command.args.iter().any(|argument| argument == "51820")
+        }));
+        assert_eq!(
+            plan.rollback_commands()[0].args,
+            ["delete", "table", "inet", "gsm_tunnel_killswitch"]
+        );
     }
 
     #[test]
