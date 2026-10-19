@@ -66,6 +66,10 @@ checked against the sender address before protocol decoding. A server may
 receive from an unset endpoint during initial admission; the authenticated
 handshake must establish the peer before pinning a remote address.
 
+Loopback transport and engine tests cover ordinary UDP request/response and
+datagrams at the configured maximum size. Multi-client admission, public-IP
+egress, NAT, and two-process namespace checks remain deployment-level tests.
+
 `SessionEndpointTable` provides the corresponding multi-session boundary.
 The authenticated admission path calls `pin` once, and each received
 datagram must pass `validate` for its `SessionId`. Endpoint changes never
