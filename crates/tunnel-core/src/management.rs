@@ -1017,6 +1017,27 @@ mod tests {
                 .status,
             STATUS_NOT_FOUND
         );
+        let mut reconnected_session = Vec::new();
+        reconnected_session.extend_from_slice(&10_u32.to_be_bytes());
+        reconnected_session.extend_from_slice(&7_u64.to_be_bytes());
+        assert_eq!(
+            service
+                .handle(
+                    &request(OPERATION_CREATE_SESSION, reconnected_session.clone()),
+                    UNIX_EPOCH,
+                )
+                .status,
+            STATUS_OK
+        );
+        assert_eq!(
+            service
+                .handle(
+                    &request(OPERATION_TERMINATE_SESSION, reconnected_session),
+                    UNIX_EPOCH,
+                )
+                .status,
+            STATUS_OK
+        );
         let mut revocable_session = Vec::new();
         revocable_session.extend_from_slice(&11_u32.to_be_bytes());
         revocable_session.extend_from_slice(&7_u64.to_be_bytes());
