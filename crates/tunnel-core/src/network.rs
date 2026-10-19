@@ -42,6 +42,7 @@ pub enum NetworkConfigError {
     InvalidMtu,
     InvalidInterfaceName,
     EndpointUsesTunnelAddress,
+    EndpointGatewayFamilyMismatch,
 }
 
 /// One argv-safe command emitted by the privileged Linux network adapter.
@@ -67,6 +68,143 @@ pub struct LinuxNetworkPlan {
     pub external_interface: String,
     pub endpoint: SocketAddr,
     pub config: TunnelNetworkConfig,
+}
+
+/// Validated Linux client route setup and rollback plan.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LinuxClientRoutePlan {
+    pub tunnel_interface: String,
+    pub physical_interface: String,
+    pub endpoint: SocketAddr,
+    pub gateway: IpAddr,
+    pub config: TunnelNetworkConfig,
+}
+
+impl LinuxClientRoutePlan {
+    /// Creates a client route plan without changing host routing state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for invalid interface names, invalid network
+    /// configuration, a tunnel-internal endpoint, or a gateway from the wrong
+    /// address family.
+    pub fn new(
+        tunnel_interface: impl Into<String>,
+        physical_interface: impl Into<String>,
+        endpoint: SocketAddr,
+        gateway: IpAddr,
+        config: TunnelNetworkConfig,
+    ) -> Result<Self, NetworkConfigError> {
+        let tunnel_interface = tunnel_interface.into();
+        let physical_interface = physical_interface.into();
+        if !valid_interface_name(&tunnel_interface) || !valid_interface_name(&physical_interface) {
+            return Err(NetworkConfigError::InvalidInterfaceName);
+        }
+        config.validate()?;
+        if endpoint_is_inside_tunnel(endpoint.ip(), &config) {
+            return Err(NetworkConfigError::EndpointUsesTunnelAddress);
+        }
+        if endpoint.ip().is_ipv4() != gateway.is_ipv4() {
+            return Err(NetworkConfigError::EndpointGatewayFamilyMismatch);
+        }
+        Ok(Self {
+            tunnel_interface,
+            physical_interface,
+            endpoint,
+            gateway,
+            config,
+        })
+    }
+
+    #[must_use]
+    pub fn apply_commands(&self) -> Vec<NetworkCommand> {
+        let (family_flag, endpoint_cidr) = match self.endpoint.ip() {
+            IpAddr::V4(address) => (None, format!("{address}/32")),
+            IpAddr::V6(address) => (Some("-6"), format!("{address}/128")),
+        };
+        let mut endpoint_args = vec![
+            "route".to_owned(),
+            "replace".to_owned(),
+            endpoint_cidr,
+            "via".to_owned(),
+            self.gateway.to_string(),
+            "dev".to_owned(),
+            self.physical_interface.clone(),
+        ];
+        if let Some(flag) = family_flag {
+            endpoint_args.insert(0, flag.to_owned());
+        }
+        let mut commands = vec![NetworkCommand::new("ip", endpoint_args)];
+        commands.push(NetworkCommand::new(
+            "ip",
+            [
+                "route".to_owned(),
+                "replace".to_owned(),
+                "default".to_owned(),
+                "dev".to_owned(),
+                self.tunnel_interface.clone(),
+            ],
+        ));
+        if self.config.dual_stack {
+            commands.push(NetworkCommand::new(
+                "ip",
+                [
+                    "-6".to_owned(),
+                    "route".to_owned(),
+                    "replace".to_owned(),
+                    "default".to_owned(),
+                    "dev".to_owned(),
+                    self.tunnel_interface.clone(),
+                ],
+            ));
+        }
+        commands
+    }
+
+    #[must_use]
+    pub fn cleanup_commands(&self) -> Vec<NetworkCommand> {
+        let (family_flag, endpoint_cidr) = match self.endpoint.ip() {
+            IpAddr::V4(address) => (None, format!("{address}/32")),
+            IpAddr::V6(address) => (Some("-6"), format!("{address}/128")),
+        };
+        let mut endpoint_args = vec![
+            "route".to_owned(),
+            "del".to_owned(),
+            endpoint_cidr,
+            "via".to_owned(),
+            self.gateway.to_string(),
+            "dev".to_owned(),
+            self.physical_interface.clone(),
+        ];
+        if let Some(flag) = family_flag {
+            endpoint_args.insert(0, flag.to_owned());
+        }
+        let mut commands = vec![NetworkCommand::new(
+            "ip",
+            [
+                "route".to_owned(),
+                "del".to_owned(),
+                "default".to_owned(),
+                "dev".to_owned(),
+                self.tunnel_interface.clone(),
+            ],
+        )];
+        if self.config.dual_stack {
+            commands.push(NetworkCommand::new(
+                "ip",
+                [
+                    "-6".to_owned(),
+                    "route".to_owned(),
+                    "del".to_owned(),
+                    "default".to_owned(),
+                    "dev".to_owned(),
+                    self.tunnel_interface.clone(),
+                ],
+            ));
+        }
+        commands.push(NetworkCommand::new("ip", endpoint_args));
+        commands
+    }
 }
 
 impl LinuxNetworkPlan {
@@ -363,7 +501,9 @@ fn contains_ipv6(network: Ipv6Addr, prefix: u8, address: Ipv6Addr) -> bool {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
-    use super::{LinuxNetworkPlan, MtuBudget, NetworkConfigError, TunnelNetworkConfig};
+    use super::{
+        LinuxClientRoutePlan, LinuxNetworkPlan, MtuBudget, NetworkConfigError, TunnelNetworkConfig,
+    };
 
     #[test]
     fn defaults_match_dual_stack_spec_and_budget() {
@@ -480,6 +620,45 @@ mod tests {
                 TunnelNetworkConfig::default(),
             ),
             Err(NetworkConfigError::EndpointUsesTunnelAddress)
+        );
+    }
+
+    #[test]
+    fn builds_client_endpoint_and_default_route_plan() {
+        let plan = LinuxClientRoutePlan::new(
+            "gsm0",
+            "eth0",
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+            IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
+            TunnelNetworkConfig::default(),
+        )
+        .unwrap();
+        let commands = plan.apply_commands();
+        assert_eq!(commands[0].args[0], "route");
+        assert!(
+            commands.iter().any(|command| {
+                command.args == vec!["route", "replace", "default", "dev", "gsm0"]
+            })
+        );
+        assert!(
+            commands
+                .iter()
+                .any(|command| { command.args.first() == Some(&"-6".to_owned()) })
+        );
+        assert_eq!(plan.cleanup_commands().len(), 3);
+    }
+
+    #[test]
+    fn rejects_client_route_gateway_family_mismatch() {
+        assert_eq!(
+            LinuxClientRoutePlan::new(
+                "gsm0",
+                "eth0",
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 1),
+                IpAddr::V6(Ipv6Addr::LOCALHOST),
+                TunnelNetworkConfig::default(),
+            ),
+            Err(NetworkConfigError::EndpointGatewayFamilyMismatch)
         );
     }
 }
