@@ -64,6 +64,11 @@ pub enum DnsConfigError {
 
 impl DnsPolicy {
     /// Validates an ordered resolver policy without changing host state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the policy has no upstream, exceeds the bounded
+    /// upstream/domain limits, or contains an invalid port/domain.
     pub fn new(
         upstreams: Vec<DnsUpstream>,
         search_domains: Vec<String>,
@@ -79,6 +84,11 @@ impl DnsPolicy {
 
 impl DnsSnapshot {
     /// Validates the resolver state that will be restored after disconnect.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the snapshot exceeds the bounded limits or
+    /// contains an invalid upstream or domain.
     pub fn new(
         upstreams: Vec<DnsUpstream>,
         search_domains: Vec<String>,
@@ -99,6 +109,12 @@ impl DnsSnapshot {
 
 impl LinuxDnsPlan {
     /// Builds a Linux `resolvectl` plan; commands are never executed here.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the interface is unsafe or either the active
+    /// policy or captured snapshot uses a transport unsupported by
+    /// `resolvectl`.
     pub fn new(
         interface: impl Into<String>,
         policy: DnsPolicy,
@@ -108,13 +124,8 @@ impl LinuxDnsPlan {
         if !valid_interface_name(&interface) {
             return Err(DnsConfigError::InvalidInterfaceName);
         }
-        for upstream in &policy.upstreams {
-            if upstream.port != 53
-                || !matches!(upstream.transport, DnsTransport::Udp | DnsTransport::Tcp)
-            {
-                return Err(DnsConfigError::UnsupportedLinuxTransport);
-            }
-        }
+        validate_linux_upstreams(&policy.upstreams)?;
+        validate_linux_upstreams(&snapshot.upstreams)?;
         Ok(Self {
             interface,
             policy,
@@ -134,12 +145,7 @@ impl LinuxDnsPlan {
         let mut commands = vec![DnsCommand::new("resolvectl", args)];
         if !self.policy.search_domains.is_empty() {
             let mut domain_args = vec!["domain".to_owned(), self.interface.clone()];
-            domain_args.extend(
-                self.policy
-                    .search_domains
-                    .iter()
-                    .map(|domain| format!("~{domain}")),
-            );
+            domain_args.extend(self.policy.search_domains.iter().cloned());
             commands.push(DnsCommand::new("resolvectl", domain_args));
         }
         commands.push(DnsCommand::new("resolvectl", ["flush-caches".to_owned()]));
@@ -201,13 +207,23 @@ fn validate_upstream(upstream: &DnsUpstream) -> Result<(), DnsConfigError> {
     Ok(())
 }
 
+fn validate_linux_upstreams(upstreams: &[DnsUpstream]) -> Result<(), DnsConfigError> {
+    if upstreams.iter().any(|upstream| {
+        upstream.port != 53 || !matches!(upstream.transport, DnsTransport::Udp | DnsTransport::Tcp)
+    }) {
+        return Err(DnsConfigError::UnsupportedLinuxTransport);
+    }
+    Ok(())
+}
+
 fn validate_search_domains(domains: &[String]) -> Result<(), DnsConfigError> {
     if domains.len() > MAX_SEARCH_DOMAINS {
         return Err(DnsConfigError::TooManySearchDomains);
     }
-    if domains.iter().any(|domain| {
-        domain.is_empty() || domain.chars().any(|character| character.is_whitespace())
-    }) {
+    if domains
+        .iter()
+        .any(|domain| domain.is_empty() || domain.chars().any(char::is_whitespace))
+    {
         return Err(DnsConfigError::InvalidSearchDomain);
     }
     Ok(())
@@ -248,7 +264,7 @@ mod tests {
         let plan = LinuxDnsPlan::new("tun0", policy, snapshot).unwrap();
         assert_eq!(plan.apply_commands()[0].program, "resolvectl");
         assert_eq!(plan.apply_commands()[0].args[2], "1.1.1.1");
-        assert_eq!(plan.apply_commands()[1].args[2], "~example.test");
+        assert_eq!(plan.apply_commands()[1].args[2], "example.test");
     }
 
     #[test]

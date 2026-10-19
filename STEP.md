@@ -145,7 +145,7 @@ Tunnel Handshake / Encrypted Session
 - [x] VPN 서버 Endpoint: 물리 인터페이스 예외 경로 유지
 - [x] NAT: Linux nftables MASQUERADE
 - [x] IPv6: 초기 버전부터 듀얼스택 터널링 지원
-- [ ] DNS: VPN 연결 시 지정 Resolver 적용, 종료 시 원래 설정 복원
+- [x] DNS: VPN 연결 시 지정 Resolver 적용, 종료 시 원래 설정 복원 계획
 - [ ] Kill Switch: 초기 개발에서는 선택 기능, 실사용 전 필수 검증
 
 ### 추가 확정 결정
@@ -1005,10 +1005,10 @@ DISCONNECTED
 
 ### 12.1. DNS
 
-- [ ] VPN 연결 시 DNS 설정 적용
-- [ ] VPN 종료 시 DNS 복원
-- [ ] IPv4 DNS 처리
-- [ ] IPv6 DNS 처리
+- [x] VPN 연결 시 DNS 설정 적용 계획
+- [x] VPN 종료 시 DNS 복원 계획
+- [x] IPv4 DNS 처리 정책
+- [x] IPv6 DNS 처리 정책
 - [ ] DNS 서버 접근 가능 여부 확인
 - [ ] DNS 장애 처리
 - [ ] 외부 DNS 유출 테스트
