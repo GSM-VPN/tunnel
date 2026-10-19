@@ -81,6 +81,18 @@ VPN Server 승인 연동은 [`vpn-server-integration.md`](./vpn-server-integrati
 HMAC 서명만 받고, 로그인 API나 `GATEWAY_SHARED_SECRET` 원문을 Rust Core에
 전달하지 않는다.
 
+`ListSessions` is the peer-level connection status boundary. Each returned
+13-byte record contains `session_id`, `peer_id`, and the lifecycle state code;
+it does not include keys, packet contents, or user profile data. The Controller
+can therefore render per-peer connection state without transporting the data
+plane through Go.
+
+Secret configuration follows a separate boundary: `GATEWAY_SHARED_SECRET` is
+kept by the Gateway/VPN service-authentication layer, while
+`SERVER_PRIVATE_KEY` is supplied to Rust Core through its environment and is
+parsed directly into the protected `ServerIdentity`. Neither value is stored
+in a settings file, sent through IPC, or included in status and metrics.
+
 ## Go Controller 운영 로그
 
 Controller의 운영 로그는 `log/slog` 구조화 이벤트로 기록한다. 기본 logger는
