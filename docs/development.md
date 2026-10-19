@@ -83,3 +83,20 @@ HMAC 서명만 받고, 로그인 API나 `GATEWAY_SHARED_SECRET` 원문을 Rust C
 
 프로토콜·암호화·네트워크 기능은 각 단계의 테스트 요구사항을 충족하기 전까지 실제 사용자 트래픽에 사용하지 않습니다.
 
+## 테스트 범위
+
+Rust 단위 테스트는 프로토콜 codec, Noise 핸드셰이크, AEAD·Replay·키 세대,
+세션 상태와 네트워크 정책을 메모리 경계에서 검증한다. codec과 내부 IP
+패킷 validator에는 `proptest` 기반 임의 입력 비패닉 테스트가 포함되어
+있으며, 테스트 대상은 오류를 반환하고 프로세스를 종료하지 않아야 한다.
+
+```text
+cargo test --workspace --all-targets --all-features
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+go test ./...
+go vet ./...
+```
+
+Linux network namespace, 실제 DNS·nftables 적용, 외부 인터넷 유출,
+Windows Wintun, 성능 벤치마크와 장애 주입은 별도 권한·환경이 필요한
+통합 검증으로 단위 테스트에 포함하지 않는다.
