@@ -26,3 +26,10 @@ rollback path. A Kill Switch is not implemented by the Rust library yet.
 Configuration validation does not apply routes, firewall rules, DNS settings,
 or NAT rules. Those operations remain in a privileged platform/deployment
 layer and must preserve an endpoint exception route plus a rollback path.
+
+`LinuxNetworkPlan` is the boundary between the validated policy and that
+privileged layer. It emits argv-safe `ip`, `sysctl`, and `nft` command records
+for server interface setup, IPv4 MASQUERADE, optional IPv6 addressing, and
+cleanup. It never executes commands. Interface names are restricted to safe
+Linux device-name characters, and an endpoint inside the VPN address space is
+rejected to prevent a routing loop.
