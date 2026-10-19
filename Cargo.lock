@@ -746,6 +746,7 @@ name = "tunnel-core"
 version = "0.1.0"
 dependencies = [
  "chacha20poly1305",
+ "getrandom 0.3.4",
  "libc",
  "proptest",
  "sha2",

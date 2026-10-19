@@ -13,6 +13,7 @@ pub enum IdentityConfigError {
     MissingPrivateKey,
     InvalidPrivateKeyLength,
     InvalidPrivateKeyEncoding,
+    RandomGeneration,
 }
 
 /// Server identity held by the Rust Core. The private key is never exposed in
@@ -33,6 +34,26 @@ impl fmt::Debug for ServerIdentity {
 }
 
 impl ServerIdentity {
+    /// Generates a new identity using the operating system's CSPRNG.
+    ///
+    /// Stable deployments should load their provisioned key through
+    /// [`Self::from_env`] rather than generating a replacement at restart.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`IdentityConfigError::RandomGeneration`] when the operating
+    /// system CSPRNG cannot provide key material.
+    pub fn generate() -> Result<Self, IdentityConfigError> {
+        let mut private_bytes = Zeroizing::new([0; 32]);
+        getrandom::fill(&mut *private_bytes).map_err(|_| IdentityConfigError::RandomGeneration)?;
+        let private_secret = StaticSecret::from(*private_bytes);
+        let public_key = PublicKey::from(&private_secret);
+        Ok(Self {
+            private_key: private_bytes,
+            public_key,
+        })
+    }
+
     /// Loads `SERVER_PRIVATE_KEY` as exactly 32 bytes of lowercase/uppercase
     /// hexadecimal without logging or copying the secret into a String field.
     ///
@@ -112,6 +133,14 @@ mod tests {
         let debug = format!("{identity:?}");
         assert!(debug.contains("redacted"));
         assert!(!debug.contains(&"11".repeat(32)));
+    }
+
+    #[test]
+    fn generates_identity_from_os_csprng_without_exposing_private_material() {
+        let identity = ServerIdentity::generate().expect("OS CSPRNG is available");
+        assert_ne!(identity.public_key(), [0; 32]);
+        let debug = format!("{identity:?}");
+        assert!(debug.contains("redacted"));
     }
 
     #[test]

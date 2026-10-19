@@ -68,23 +68,23 @@ Offset  Size  Field
 - [x] 키 교환: X25519
 - [x] 키 파생: HKDF-SHA-256
 - [x] 데이터 암호화: ChaCha20-Poly1305
-- [ ] 난수: 운영체제 CSPRNG
+- [x] 난수: 운영체제 CSPRNG
 - [x] 송신 키와 수신 키 분리
 - [x] 세션별 키와 키 세대 분리
 - [x] Nonce는 키 세대별 단조 증가 카운터에서 파생
 - [x] 카운터 재사용 및 오버플로 발생 시 세션 종료
 - [x] Replay Window 기본 크기: 2,048 packets
-- [ ] 키 갱신: 1시간 또는 방향별 1GiB 전송 중 먼저 도달하는 조건
-- [ ] 키 갱신 실패 시 세션을 안전하게 종료
+- [x] 키 갱신: 1시간 또는 방향별 1GiB 전송 중 먼저 도달하는 조건
+- [x] 키 갱신 실패 시 세션을 안전하게 종료
 - [x] 키·평문 패킷·암호문을 로그에 기록하지 않음
 
 ### 기존 `vpn-server` 인증 설정 연동
 
 기존 `vpn-server`에 정의된 인증 설정을 기준으로 다음을 확정한다.
 
-- [ ] `GATEWAY_SHARED_SECRET`는 Gateway와 VPN Server/Controller 사이의 서비스·제어 평면 인증에 사용
-- [ ] `GATEWAY_SHARED_SECRET`는 Tunnel 데이터 패킷 암호화 키로 사용하지 않음
-- [ ] `GATEWAY_SHARED_SECRET`는 Noise 정적 키 또는 서버 공개키 파생에 재사용하지 않음
+- [x] `GATEWAY_SHARED_SECRET`는 Gateway와 VPN Server/Controller 사이의 서비스·제어 평면 인증에 사용
+- [x] `GATEWAY_SHARED_SECRET`는 Tunnel 데이터 패킷 암호화 키로 사용하지 않음
+- [x] `GATEWAY_SHARED_SECRET`는 Noise 정적 키 또는 서버 공개키 파생에 재사용하지 않음
 - [x] `SERVER_PRIVATE_KEY`는 Tunnel Server의 장기 개인키로 사용
 - [x] 서버 공개키는 `SERVER_PRIVATE_KEY`에서 결정적으로 파생
 - [x] 클라이언트는 파생된 서버 공개키를 사전에 신뢰하거나 Gateway/VPN Server의 승인 정보로 전달받아 검증
