@@ -400,9 +400,9 @@ Windows/Wintun
 - [x] `crates/tunnel-core` 생성
 - [x] `internal/controller` 생성
 - [x] `internal/protocol` 생성
-- [ ] `examples` 디렉터리 생성
-- [ ] `tests` 디렉터리 생성
-- [ ] `benches` 디렉터리 생성
+- [x] `examples` 디렉터리 생성
+- [x] `tests` 디렉터리 생성
+- [x] `benches` 디렉터리 생성
 - [x] `docs` 디렉터리 생성
 - [x] Go 버전 고정
 - [x] Rust toolchain 버전 고정
