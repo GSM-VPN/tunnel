@@ -382,8 +382,8 @@ Windows/Wintun
 
 ### 0.5. 설계 산출물
 
-- [ ] `docs/protocol-design.md` 작성
-- [ ] `docs/security-design.md` 작성
+- [x] `docs/protocol-design.md` 작성
+- [x] `docs/security-design.md` 작성
 - [x] `docs/session-state-machine.md` 작성
 - [x] `docs/ipc-api.md` 작성
 - [ ] 결정 사항을 `SPEC.md`의 미확정 항목에 반영
