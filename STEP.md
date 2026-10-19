@@ -176,7 +176,7 @@ Tunnel Handshake / Encrypted Session
 - [x] 사용자 식별자, 클라이언트 공개키, IPv4 주소, IPv6 주소, 만료 시각을 승인 정보에 포함
 - [x] 승인 정보는 `GATEWAY_SHARED_SECRET`로 직접 암호화하지 않고 인증된 제어 채널을 통해 전달
 - [x] 승인 만료 또는 철회 시 Tunnel Core가 해당 세션을 종료
-- [ ] 클라이언트 공개키 변경은 기존 키 폐기 후 새 키 등록으로 처리
+- [x] 클라이언트 공개키 변경은 기존 키 폐기 후 새 키 등록으로 처리
 
 #### DNS Resolver
 
