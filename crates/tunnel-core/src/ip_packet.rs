@@ -138,6 +138,8 @@ pub fn is_tunnel_ipv4_address(address: Ipv4Addr) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::{
         InnerIpPacketError, InnerIpVersion, ipv4_header_checksum, validate_inner_ip_packet,
     };
@@ -216,5 +218,16 @@ mod tests {
             validate_inner_ip_packet(&ipv6(b"x"), 1_400, false),
             Err(InnerIpPacketError::Ipv6Disabled)
         );
+    }
+
+    proptest! {
+        #[test]
+        fn arbitrary_packets_never_panic(
+            packet in proptest::collection::vec(any::<u8>(), 0..=2_048),
+            mtu in 0usize..=1_500,
+            dual_stack in any::<bool>(),
+        ) {
+            let _ = validate_inner_ip_packet(&packet, mtu, dual_stack);
+        }
     }
 }
