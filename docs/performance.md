@@ -1,6 +1,7 @@
 # Performance measurement plan
 
-No throughput claim is made until measurements are available. Record the
+The `512MB` target is a throughput objective, not a packet-size limit. No
+throughput claim is made until measurements are available. Record the
 commit, OS/kernel, CPU, memory, MTU, packet size distribution, cipher mode,
 number of sessions, and loss/latency conditions with every result.
 
