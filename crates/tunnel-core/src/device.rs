@@ -9,6 +9,7 @@ pub enum DeviceError {
     PacketTooLarge { actual: usize, mtu: usize },
     BufferTooSmall { buffer: usize, packet: usize },
     Poisoned,
+    Io(std::io::ErrorKind),
 }
 
 /// Common packet I/O contract for TUN and test devices.
