@@ -264,8 +264,8 @@ Tunnel Handshake / Encrypted Session
 - [x] `GATEWAY_SHARED_SECRET` 원문은 IPC로 전달하지 않음
 - [x] 필요한 경우 Controller가 인증된 승인 결과만 Rust Core에 전달
 - [x] `SERVER_PRIVATE_KEY`는 Rust Core의 장기 키 저장·로딩 경계를 통해서만 사용
-- [ ] Rust Core 장애 시 Go Controller가 상태를 `UNHEALTHY`로 전환
-- [ ] 자동 재시작은 제한된 횟수와 백오프를 사용
+- [x] Rust Core 장애 시 Go Controller가 상태를 `UNHEALTHY`로 전환
+- [x] 자동 재시작은 제한된 횟수와 백오프를 사용
 
 ### 초기 범위 제외
 
@@ -898,10 +898,10 @@ DISCONNECTED
 ### 9.4. 완료 기준
 
 - [x] Go가 Rust Core를 시작하고 종료할 수 있다.
-- [ ] Go가 Peer와 설정을 등록할 수 있다.
+- [x] Go가 Peer와 설정을 등록할 수 있다.
 - [x] Rust Core 장애를 Go가 감지할 수 있다.
 - [x] 데이터 패킷이 Go를 통과하지 않는다.
-- [ ] IPC 접근이 승인된 로컬 프로세스로 제한된다.
+- [x] IPC 접근이 승인된 로컬 프로세스로 제한된다.
 
 ---
 
