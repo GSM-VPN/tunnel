@@ -46,5 +46,7 @@ same identifiers. `Stop` clears all sessions.
 and IPv6 `/64` prefixes, UDP port, MTU, dual-stack flag, and kill-switch flag.
 Configuration changes are accepted only while the Core is not running.
 
-Socket ownership, caller credentials, and operation-specific authorization
-must be enforced by the eventual daemon wrapper before production use.
+The Rust server applies mode `0600` to the Unix socket and bounds each
+connection's read and write operations to five seconds. Socket ownership,
+caller credentials, and operation-specific authorization must still be
+enforced by the eventual daemon wrapper before production use.
