@@ -27,6 +27,19 @@ Configuration validation does not apply routes, firewall rules, DNS settings,
 or NAT rules. Those operations remain in a privileged platform/deployment
 layer and must preserve an endpoint exception route plus a rollback path.
 
+`DnsPolicy` validates an ordered list of IPv4/IPv6 upstreams and search
+domains. It can represent UDP, TCP, DoT, and DoH transports for a future
+resolver implementation, while `LinuxDnsPlan` currently emits only the
+`resolvectl` form supported by the host adapter: port 53 over UDP or TCP.
+The ordered list is retained so a resolver adapter can implement upstream
+fallback without changing the control-plane model.
+
+Before applying a tunnel policy, capture the current resolver addresses and
+domains in `DnsSnapshot`. `LinuxDnsPlan::restore_commands` first reverts the
+link and then restores the captured values, followed by a cache flush. The
+Rust library only returns argv-safe command records; it never changes the
+host resolver itself.
+
 `LinuxNetworkPlan` is the boundary between the validated policy and that
 privileged layer. It emits argv-safe `ip`, `sysctl`, and `nft` command records
 for server interface setup, IPv4 MASQUERADE, optional IPv6 addressing, and
