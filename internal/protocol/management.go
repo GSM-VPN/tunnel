@@ -19,17 +19,30 @@ const (
 var (
 	ErrManagementFrameTooLarge  = errors.New("management frame exceeds maximum size")
 	ErrManagementFrameMalformed = errors.New("malformed management frame")
+	ErrUnknownOperation         = errors.New("unknown management operation")
 )
 
 // Operation identifies a controller request without carrying data-plane keys.
 type Operation uint16
 
 const (
-	OperationHealth Operation = iota + 1
+	OperationInitialize Operation = iota + 1
 	OperationStart
 	OperationStop
+	OperationRegisterPeer
+	OperationRemovePeer
+	OperationCreateSession
+	OperationTerminateSession
+	OperationGetSession
+	OperationListSessions
 	OperationGetMetrics
+	OperationUpdateConfiguration
+	OperationHealth
 )
+
+func (operation Operation) IsValid() bool {
+	return operation >= OperationInitialize && operation <= OperationHealth
+}
 
 // ManagementRequest contains only control-plane metadata and opaque operation payload.
 // Key material must never be represented by this type.
@@ -53,6 +66,9 @@ type ManagementResponse struct {
 func (request ManagementRequest) MarshalFrame() ([]byte, error) {
 	if request.Version == 0 {
 		return nil, fmt.Errorf("%w: zero request version", ErrManagementFrameMalformed)
+	}
+	if !request.Operation.IsValid() {
+		return nil, ErrUnknownOperation
 	}
 	if len(request.Payload) > MaxManagementFrameSize-managementRequestSize-managementFrameHeaderSize {
 		return nil, ErrManagementFrameTooLarge
@@ -88,6 +104,9 @@ func UnmarshalRequestFrame(frame []byte) (ManagementRequest, error) {
 		RequestID: binary.BigEndian.Uint64(frame[offset+2:]),
 		Operation: Operation(binary.BigEndian.Uint16(frame[offset+10:])),
 		Payload:   append([]byte(nil), frame[offset+managementRequestSize:]...),
+	}
+	if !request.Operation.IsValid() {
+		return ManagementRequest{}, ErrUnknownOperation
 	}
 	return request, nil
 }

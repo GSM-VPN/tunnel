@@ -29,6 +29,19 @@ func TestManagementRequestCarriesControlMetadata(t *testing.T) {
 	}
 }
 
+func TestManagementOperationsAreStableAndValidated(t *testing.T) {
+	if OperationInitialize != 1 || OperationHealth != 12 {
+		t.Fatalf("unexpected operation contract: initialize=%d health=%d", OperationInitialize, OperationHealth)
+	}
+	if !OperationRegisterPeer.IsValid() || Operation(99).IsValid() {
+		t.Fatal("operation validation contract is incorrect")
+	}
+	request := ManagementRequest{Version: ManagementVersion, RequestID: 1, Operation: Operation(99)}
+	if _, err := request.MarshalFrame(); err != ErrUnknownOperation {
+		t.Fatalf("expected unknown operation error, got %v", err)
+	}
+}
+
 func TestManagementResponsePayloadIsOpaque(t *testing.T) {
 	response := ManagementResponse{Version: ManagementVersion, RequestID: 9, Status: 200, Payload: []byte{1, 2}}
 	if !reflect.DeepEqual(response.Payload, []byte{1, 2}) {
