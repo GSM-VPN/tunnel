@@ -204,7 +204,7 @@ impl LinuxNetworkPlan {
 
     #[must_use]
     pub fn cleanup_commands(&self) -> Vec<NetworkCommand> {
-        vec![
+        let mut commands = vec![
             NetworkCommand::new(
                 "nft",
                 [
@@ -224,22 +224,38 @@ impl LinuxNetworkPlan {
                     self.tunnel_interface.clone(),
                 ],
             ),
-            NetworkCommand::new(
+        ];
+        if self.config.dual_stack {
+            commands.push(NetworkCommand::new(
                 "ip",
                 [
-                    "link".to_owned(),
-                    "set".to_owned(),
+                    "-6".to_owned(),
+                    "addr".to_owned(),
+                    "del".to_owned(),
+                    format!("{}/{}", self.config.server_ipv6, self.config.ipv6_prefix),
                     "dev".to_owned(),
                     self.tunnel_interface.clone(),
-                    "down".to_owned(),
                 ],
-            ),
-        ]
+            ));
+        }
+        commands.push(NetworkCommand::new(
+            "ip",
+            [
+                "link".to_owned(),
+                "set".to_owned(),
+                "dev".to_owned(),
+                self.tunnel_interface.clone(),
+                "down".to_owned(),
+            ],
+        ));
+        commands
     }
 }
 
 fn valid_interface_name(name: &str) -> bool {
-    !name.is_empty()
+    name != "."
+        && name != ".."
+        && !name.is_empty()
         && name.len() <= 15
         && name
             .bytes()
