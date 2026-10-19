@@ -15,6 +15,8 @@ mod linux_device;
 
 mod key_rotation;
 mod management;
+#[cfg(unix)]
+mod management_server;
 mod metrics;
 mod network;
 mod noise;
@@ -30,12 +32,15 @@ pub use key_rotation::{KeyRotationPolicy, RotationReason};
 pub use linux_device::LinuxTunDevice;
 pub use management::{
     MAX_MANAGEMENT_FRAME_SIZE, ManagementError, ManagementRequest, ManagementResponse,
-    OPERATION_CREATE_SESSION, OPERATION_GET_HEALTH, OPERATION_GET_SESSION,
+    ManagementService, OPERATION_CREATE_SESSION, OPERATION_GET_HEALTH, OPERATION_GET_SESSION,
     OPERATION_GET_STATISTICS, OPERATION_INITIALIZE, OPERATION_LIST_SESSIONS,
     OPERATION_REGISTER_PEER, OPERATION_REMOVE_PEER, OPERATION_START, OPERATION_STOP,
     OPERATION_TERMINATE_SESSION, OPERATION_UPDATE_CONFIGURATION, PeerRegistrationPayload,
+    STATUS_BAD_REQUEST, STATUS_CONFLICT, STATUS_NOT_FOUND, STATUS_NOT_IMPLEMENTED, STATUS_OK,
     decode_peer_registration, decode_peer_removal, encode_peer_registration, encode_peer_removal,
 };
+#[cfg(unix)]
+pub use management_server::UnixManagementServer;
 pub use metrics::{Metrics, MetricsSnapshot};
 pub use network::{MtuBudget, NetworkConfigError, TunnelNetworkConfig};
 pub use noise::{NOISE_IK_PARAMS, NoiseHandshake, NoiseHandshakeError, NoiseTransport};
