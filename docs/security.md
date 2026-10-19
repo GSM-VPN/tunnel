@@ -62,6 +62,12 @@ managed session table by the configured peer capacity (216 by default).
 Expired approvals are purged at the start of each management request, releasing
 their addresses and closing any associated sessions before the request runs.
 
+Automated security evidence covers successful and failed Noise handshakes,
+lifecycle transitions, replay-window rejection, malformed packet handling,
+and cross-session isolation. Fuzzing campaigns, DNS/IPv6 leak tests, Kill
+Switch tests, fault-injected recovery, resource-exhaustion tests under load,
+and independent review remain release gates.
+
 ## Known gaps
 
 Automatic Noise IK handshake integration with the data-plane rekey flow,
