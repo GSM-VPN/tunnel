@@ -36,6 +36,16 @@ pub struct DnsSnapshot {
     pub search_domains: Vec<String>,
 }
 
+/// Ordered upstream selector for a resolver adapter.
+///
+/// The selector stores only policy addresses and a cursor. It does not retain
+/// query names, responses, or per-user DNS history.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DnsUpstreamSelector {
+    upstreams: Vec<DnsUpstream>,
+    current: usize,
+}
+
 /// One argv-safe command emitted by the privileged DNS adapter.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DnsCommand {
@@ -79,6 +89,31 @@ impl DnsPolicy {
             upstreams,
             search_domains,
         })
+    }
+}
+
+impl DnsUpstreamSelector {
+    /// Creates a selector from an already validated policy.
+    #[must_use]
+    pub fn from_policy(policy: &DnsPolicy) -> Self {
+        Self {
+            upstreams: policy.upstreams.clone(),
+            current: 0,
+        }
+    }
+
+    /// Returns the provider currently selected for the next query.
+    #[must_use]
+    pub fn current(&self) -> &DnsUpstream {
+        &self.upstreams[self.current]
+    }
+
+    /// Keeps the successful provider selected.
+    pub fn record_success(&mut self) {}
+
+    /// Advances to the next provider after a resolver failure.
+    pub fn record_failure(&mut self) {
+        self.current = (self.current + 1) % self.upstreams.len();
     }
 }
 
@@ -239,7 +274,9 @@ fn valid_interface_name(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{DnsPolicy, DnsSnapshot, DnsTransport, DnsUpstream, LinuxDnsPlan};
+    use super::{
+        DnsPolicy, DnsSnapshot, DnsTransport, DnsUpstream, DnsUpstreamSelector, LinuxDnsPlan,
+    };
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     fn upstream(address: IpAddr) -> DnsUpstream {
@@ -302,6 +339,38 @@ mod tests {
                 vec![]
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn selects_ordered_upstreams_and_falls_back_after_failure() {
+        let policy = DnsPolicy::new(
+            vec![
+                upstream("1.1.1.1".parse().unwrap()),
+                upstream("9.9.9.9".parse().unwrap()),
+            ],
+            vec![],
+        )
+        .unwrap();
+        let mut selector = DnsUpstreamSelector::from_policy(&policy);
+        assert_eq!(
+            selector.current().address,
+            "1.1.1.1".parse::<IpAddr>().unwrap()
+        );
+        selector.record_failure();
+        assert_eq!(
+            selector.current().address,
+            "9.9.9.9".parse::<IpAddr>().unwrap()
+        );
+        selector.record_success();
+        assert_eq!(
+            selector.current().address,
+            "9.9.9.9".parse::<IpAddr>().unwrap()
+        );
+        selector.record_failure();
+        assert_eq!(
+            selector.current().address,
+            "1.1.1.1".parse::<IpAddr>().unwrap()
         );
     }
 
