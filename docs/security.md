@@ -10,6 +10,10 @@ general-purpose VPN before independent security review.
 - A 2,048-packet replay window rejects duplicates and stale sequences.
 - Failed authentication does not consume a replay-window slot.
 - Payloads are delivered to a device only after successful authentication.
+- The encrypted tunnel stops before the configured age, byte, or sequence
+  boundary so a key generation is never continued past its rotation limit.
+- Sequence counters use checked arithmetic; overflow is a terminal error rather
+  than a nonce-reuse-prone saturation.
 - Management messages contain opaque payloads and no key fields.
 - IPC uses a local Unix Domain Socket rather than a network listener.
 
@@ -21,6 +25,7 @@ neither value belongs in logs, metrics, or management payloads.
 
 ## Known gaps
 
-Noise IK handshake and long-term identity verification, peer authorization,
-socket ownership enforcement, rate limiting, namespace integration, DNS/IPv6
-leak testing, and independent review remain required before deployment.
+Noise IK handshake integration with the data-plane rekey flow, long-term
+identity verification, caller authorization, rate limiting, namespace
+integration, DNS/IPv6 leak testing, and independent review remain required
+before deployment.
