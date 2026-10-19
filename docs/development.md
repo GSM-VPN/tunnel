@@ -114,7 +114,9 @@ Secret configuration follows a separate boundary: `GATEWAY_SHARED_SECRET` is
 kept by the Gateway/VPN service-authentication layer, while
 `SERVER_PRIVATE_KEY` is supplied to Rust Core through its environment and is
 parsed directly into the protected `ServerIdentity`. Neither value is stored
-in a settings file, sent through IPC, or included in status and metrics.
+in a settings file, sent through IPC, or included in status and metrics. The
+Controller receives the Gateway secret from that existing service boundary at
+initialization; it does not discover or persist a second copy of the secret.
 
 ## 운영 권한과 DNS 정책
 
