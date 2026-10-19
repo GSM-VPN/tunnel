@@ -1,0 +1,45 @@
+name: Template compliance
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  issue:
+    name: Validate issue template
+    runs-on: ubuntu-latest
+    env:
+      ISSUE_TITLE: ${{ github.event.issue.title }}
+      ISSUE_BODY: ${{ github.event.issue.body }}
+    steps:
+      - name: Check title and required sections
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$ISSUE_TITLE" in
+            "[Feature] "*)
+              sections=('기능 설명' '문제 또는 배경' '제안하는 해결 방법' '수용 기준' '참고 자료')
+              ;;
+            "[Bug] "*)
+              sections=('버그 설명' '재현 방법' '기대한 동작' '실제 동작' '실행 환경' '로그 및 첨부 자료')
+              ;;
+            "[Docs] "*)
+              sections=('문서 대상' '변경 내용' '변경 이유' '완료 기준' '참고 자료')
+              ;;
+            "[Refactor] "*)
+              sections=('리팩터링 대상' '현재 문제' '제안하는 변경' '변경 범위' '완료 기준' '참고 자료')
+              ;;
+            "[Change] "*)
+              sections=('변경 내용' '변경 이유' '영향 범위' '수용 기준' '참고 자료')
+              ;;
+            *)
+              echo "issue title must use an issue template prefix" >&2
+              exit 1
+              ;;
+          esac
+          for section in "${sections[@]}"; do
+            grep -qF "## ${section}" <<< "$ISSUE_BODY"
+          done
