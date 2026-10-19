@@ -26,6 +26,18 @@ impl Default for ThroughputPolicy {
     }
 }
 
+impl ThroughputPolicy {
+    /// Returns the equal session share of the server-wide target.
+    #[must_use]
+    pub fn per_session_bytes_per_second(self) -> u64 {
+        if self.max_sessions == 0 {
+            return 0;
+        }
+        self.target_bytes_per_second
+            .div_ceil(self.max_sessions as u64)
+    }
+}
+
 /// A point-in-time throughput result.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ThroughputSample {
@@ -110,7 +122,12 @@ impl FairByteRateLimiter {
             );
             return self.allow_existing(session_id, bytes);
         };
-        refill(bucket, self.policy, now);
+        refill(
+            bucket,
+            self.policy.per_session_bytes_per_second(),
+            self.policy.burst_bytes,
+            now,
+        );
         self.allow_existing(session_id, bytes)
     }
 
@@ -132,14 +149,14 @@ impl FairByteRateLimiter {
     }
 }
 
-fn refill(bucket: &mut Bucket, policy: ThroughputPolicy, now: SystemTime) {
+fn refill(bucket: &mut Bucket, bytes_per_second: u64, burst_bytes: u64, now: SystemTime) {
     let elapsed_nanos = now
         .duration_since(bucket.updated_at)
         .unwrap_or_default()
         .as_nanos();
-    let added = (elapsed_nanos * u128::from(policy.target_bytes_per_second)) / 1_000_000_000;
-    let added = u64::try_from(added.min(u128::from(policy.burst_bytes))).unwrap_or(u64::MAX);
-    bucket.tokens = bucket.tokens.saturating_add(added).min(policy.burst_bytes);
+    let added = (elapsed_nanos * u128::from(bytes_per_second)) / 1_000_000_000;
+    let added = u64::try_from(added.min(u128::from(burst_bytes))).unwrap_or(u64::MAX);
+    bucket.tokens = bucket.tokens.saturating_add(added).min(burst_bytes);
     bucket.updated_at = now;
 }
 
@@ -167,6 +184,7 @@ mod tests {
         };
         let start = UNIX_EPOCH + Duration::from_secs(1);
         let mut limiter = FairByteRateLimiter::new(policy);
+        assert_eq!(policy.per_session_bytes_per_second(), 500);
         assert!(limiter.allow(1, 100, start));
         assert!(!limiter.allow(1, 1, start));
         assert!(limiter.allow(2, 100, start));
