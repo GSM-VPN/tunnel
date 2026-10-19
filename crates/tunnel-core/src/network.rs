@@ -2,6 +2,7 @@
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
+use crate::ip_packet::{InnerIpPacketError, InnerIpPacketInfo, validate_inner_ip_packet};
 use crate::{AEAD_TAG_SIZE, protocol::HEADER_SIZE};
 
 const MIN_DUAL_STACK_MTU: usize = 1_280;
@@ -29,6 +30,22 @@ pub struct MtuBudget {
     pub max_packet_size: usize,
     pub max_payload_size: usize,
     pub max_encrypted_payload_size: usize,
+}
+
+impl MtuBudget {
+    /// Validates an inner packet against the encrypted payload budget.
+    ///
+    /// # Errors
+    ///
+    /// Returns an inner packet validation error when the packet is malformed,
+    /// disabled by the address-family policy, or too large for the budget.
+    pub fn validate_inner_packet(
+        &self,
+        packet: &[u8],
+        dual_stack: bool,
+    ) -> Result<InnerIpPacketInfo, InnerIpPacketError> {
+        validate_inner_ip_packet(packet, self.max_encrypted_payload_size, dual_stack)
+    }
 }
 
 /// Configuration validation failures.
@@ -838,6 +855,28 @@ impl TunnelNetworkConfig {
             max_encrypted_payload_size: self.mtu - HEADER_SIZE - AEAD_TAG_SIZE,
         })
     }
+
+    /// Returns the Kill Switch plan only when the policy explicitly enables it.
+    ///
+    /// The returned plan is declarative: applying or rolling it back remains
+    /// the responsibility of the privileged platform adapter.
+    ///
+    /// # Errors
+    ///
+    /// Returns a configuration error when the network policy or interface
+    /// names are invalid.
+    pub fn kill_switch_plan(
+        &self,
+        tunnel_interface: impl Into<String>,
+        physical_interface: impl Into<String>,
+        endpoint: SocketAddr,
+    ) -> Result<Option<LinuxKillSwitchPlan>, NetworkConfigError> {
+        self.validate()?;
+        if !self.kill_switch {
+            return Ok(None);
+        }
+        LinuxKillSwitchPlan::new(tunnel_interface, physical_interface, endpoint).map(Some)
+    }
 }
 
 fn contains_ipv4(network: Ipv4Addr, prefix: u8, address: Ipv4Addr) -> bool {
@@ -875,6 +914,62 @@ mod tests {
         LinuxClientNetworkPlan, LinuxClientRoutePlan, LinuxKillSwitchPlan, LinuxNetworkPlan,
         LinuxRouteSnapshot, LinuxRouteState, MtuBudget, NetworkConfigError, TunnelNetworkConfig,
     };
+
+    fn valid_ipv4_packet(payload: &[u8]) -> Vec<u8> {
+        let mut packet = vec![0; 20 + payload.len()];
+        packet[0] = 0x45;
+        let total_length = u16::try_from(packet.len()).expect("test packet fits IPv4 length");
+        packet[2..4].copy_from_slice(&total_length.to_be_bytes());
+        packet[8] = 64;
+        packet[9] = 17;
+        packet[12..16].copy_from_slice(&[10, 80, 0, 2]);
+        packet[16..20].copy_from_slice(&[1, 1, 1, 1]);
+        packet[20..].copy_from_slice(payload);
+        let checksum = crate::ipv4_header_checksum(&packet[..20]);
+        packet[10..12].copy_from_slice(&checksum.to_be_bytes());
+        packet
+    }
+
+    #[test]
+    fn enforces_encrypted_payload_budget_for_inner_packets() {
+        let budget = TunnelNetworkConfig::default().validate().unwrap();
+        let packet = valid_ipv4_packet(&vec![0; budget.max_encrypted_payload_size - 20]);
+        assert!(budget.validate_inner_packet(&packet, true).is_ok());
+        let oversized = valid_ipv4_packet(&vec![0; budget.max_encrypted_payload_size - 19]);
+        assert_eq!(
+            budget.validate_inner_packet(&oversized, true),
+            Err(crate::InnerIpPacketError::PayloadExceedsMtu)
+        );
+    }
+
+    #[test]
+    fn kill_switch_plan_is_absent_when_policy_is_disabled() {
+        let config = TunnelNetworkConfig::default();
+        assert_eq!(
+            config
+                .kill_switch_plan(
+                    "gsm0",
+                    "eth0",
+                    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+                )
+                .unwrap(),
+            None
+        );
+        let enabled = TunnelNetworkConfig {
+            kill_switch: true,
+            ..config
+        };
+        assert!(
+            enabled
+                .kill_switch_plan(
+                    "gsm0",
+                    "eth0",
+                    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+                )
+                .unwrap()
+                .is_some()
+        );
+    }
 
     #[test]
     fn defaults_match_dual_stack_spec_and_budget() {
