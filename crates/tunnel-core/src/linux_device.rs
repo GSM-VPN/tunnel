@@ -56,7 +56,7 @@ impl LinuxTunDevice {
             flags: IFF_TUN | IFF_NO_PI,
         };
         for (destination, source) in request.name.iter_mut().zip(bytes) {
-            *destination = *source as libc::c_char;
+            *destination = (*source).cast_signed();
         }
 
         // SAFETY: `request` has the kernel-defined ifreq prefix layout and
@@ -71,7 +71,7 @@ impl LinuxTunDevice {
             .name
             .iter()
             .take_while(|byte| **byte != 0)
-            .map(|byte| *byte as u8)
+            .map(|byte| (*byte).cast_unsigned())
             .collect::<Vec<_>>();
         let actual_name = String::from_utf8(actual_name)
             .map_err(|_| DeviceError::Io(std::io::ErrorKind::InvalidData))?;
