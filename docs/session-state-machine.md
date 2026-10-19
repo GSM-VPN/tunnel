@@ -24,3 +24,9 @@ other handshake failures.
 Authentication failure, permission revocation, and server shutdown enter
 `CLOSING`; they do not enter an unbounded retry loop. Explicit close is valid
 from active states. Successful handshakes reset reconnect attempts.
+
+The encrypted data path exposes a rekey boundary for authenticated
+handshake results. A replacement must use a strictly newer key generation and
+updates both directional ciphers together. The old generation's replay
+window, sequence counter, byte counter, and age budget are discarded, so
+packets from the previous generation are rejected after the switch.

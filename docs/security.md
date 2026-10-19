@@ -12,6 +12,13 @@ general-purpose VPN before independent security review.
 - Payloads are delivered to a device only after successful authentication.
 - The encrypted tunnel stops before the configured age, byte, or sequence
   boundary so a key generation is never continued past its rotation limit.
+- An authenticated re-handshake can install newer directional keys through
+  the encrypted tunnel rekey boundary. The generation must increase
+  monotonically, and the old key, replay window, sequence counter, byte
+  counter, and age budget are discarded together.
+- Packets from an older key generation are rejected immediately after the
+  switch; the current boundary intentionally provides no old-key grace
+  window.
 - Sequence counters use checked arithmetic; overflow is a terminal error rather
   than a nonce-reuse-prone saturation.
 - Management messages contain opaque payloads and no key fields.
@@ -49,7 +56,7 @@ their addresses and closing any associated sessions before the request runs.
 
 ## Known gaps
 
-Noise IK handshake integration with the data-plane rekey flow, long-term
-identity verification, caller authorization, rate limiting, namespace
-integration, DNS/IPv6 leak testing, and independent review remain required
-before deployment.
+Automatic Noise IK handshake integration with the data-plane rekey flow,
+long-term identity verification, caller authorization, rate limiting,
+namespace integration, DNS/IPv6 leak testing, and independent review remain
+required before deployment.
