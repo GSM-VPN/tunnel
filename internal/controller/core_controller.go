@@ -161,14 +161,28 @@ func (controller *CoreController) ApplyPeerApproval(ctx context.Context, peer pr
 // RevokePeerApproval removes an approval and asks Core to revoke it when the
 // process is running. Rust Core also closes sessions owned by that peer.
 func (controller *CoreController) RevokePeerApproval(ctx context.Context, peerID, requestID uint64) error {
+	return controller.removePeerApproval(ctx, peerID, requestID, "peer_approval_revoked")
+}
+
+// PurgePeerKey permanently removes the currently approved client identity
+// from desired state and the running Core. It is intentionally separate from
+// connection revocation so management callers cannot treat key destruction as
+// a temporary disconnect.
+func (controller *CoreController) PurgePeerKey(ctx context.Context, peerID, requestID uint64) error {
+	return controller.removePeerApproval(ctx, peerID, requestID, "peer_key_purged")
+}
+
+func (controller *CoreController) removePeerApproval(ctx context.Context, peerID, requestID uint64, event string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	controller.RevokePeer(peerID)
 	controller.mu.Lock()
+	controller.desired.RemovePeer(peerID)
 	state := controller.state
 	socketPath := controller.config.SocketPath
+	logger := controller.logger
 	controller.mu.Unlock()
+	logCoreEvent(logger, event, "peer_id", peerID)
 	if state != CoreRunning {
 		return nil
 	}
