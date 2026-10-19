@@ -19,6 +19,7 @@ pub struct TunnelNetworkConfig {
     pub udp_port: u16,
     pub mtu: usize,
     pub dual_stack: bool,
+    pub nat66: bool,
     pub kill_switch: bool,
 }
 
@@ -138,6 +139,7 @@ impl LinuxClientNetworkPlan {
     }
 
     #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn apply_commands(&self) -> Vec<NetworkCommand> {
         let mut commands = vec![NetworkCommand::new(
             "ip",
@@ -354,6 +356,7 @@ impl LinuxNetworkPlan {
     }
 
     #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn apply_commands(&self) -> Vec<NetworkCommand> {
         let mut commands = vec![
             NetworkCommand::new(
@@ -452,6 +455,24 @@ impl LinuxNetworkPlan {
                 ],
             ),
         ]);
+        if self.config.dual_stack && self.config.nat66 {
+            commands.push(NetworkCommand::new(
+                "nft",
+                [
+                    "add".to_owned(),
+                    "rule".to_owned(),
+                    "inet".to_owned(),
+                    "gsm_tunnel".to_owned(),
+                    "postrouting".to_owned(),
+                    "oifname".to_owned(),
+                    self.external_interface.clone(),
+                    "ip6".to_owned(),
+                    "saddr".to_owned(),
+                    format!("{}/{}", self.config.ipv6_network, self.config.ipv6_prefix),
+                    "masquerade".to_owned(),
+                ],
+            ));
+        }
         commands
     }
 
@@ -537,6 +558,7 @@ impl Default for TunnelNetworkConfig {
             udp_port: 51_820,
             mtu: 1_400,
             dual_stack: true,
+            nat66: false,
             kill_switch: false,
         }
     }
@@ -714,6 +736,26 @@ mod tests {
         assert_eq!(
             plan.cleanup_commands()[0].args.as_slice(),
             ["delete", "table", "inet", "gsm_tunnel"]
+        );
+    }
+
+    #[test]
+    fn emits_ipv6_masquerade_only_when_nat66_is_enabled() {
+        let config = TunnelNetworkConfig {
+            nat66: true,
+            ..TunnelNetworkConfig::default()
+        };
+        let plan = LinuxNetworkPlan::new(
+            "gsm0",
+            "eth0",
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+            config,
+        )
+        .unwrap();
+        assert!(
+            plan.apply_commands()
+                .iter()
+                .any(|command| { command.args.iter().any(|argument| argument == "ip6") })
         );
     }
 
