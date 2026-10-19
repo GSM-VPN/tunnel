@@ -162,3 +162,10 @@ UDP 장애 정책은 [`udp-failure-policy.md`](./udp-failure-policy.md)에 따�
 사용하고, 응답 TTL을 1초에서 24시간 사이로 제한한다. 캐시 용량은 고정되어
 있으며 만료 응답은 조회 전에 제거된다. 실제 DoT/DoH resolver adapter가
 연결되기 전까지 Linux 기본 적용 계층은 UDP/TCP 53만 사용한다.
+## UDP transport recovery
+
+`UdpTransport::rebind` binds the replacement local endpoint before replacing
+the active socket and preserves the pinned remote endpoint. `TransportError`
+classifies `WouldBlock`, `Interrupted`, and `TimedOut` as transient so a
+reconnection loop can retry them without treating the session as permanently
+failed.
