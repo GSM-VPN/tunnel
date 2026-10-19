@@ -19,6 +19,12 @@ Core IPC. Peer revocation and expiry close managed sessions. Approval and
 session registries have bounded capacity and reject duplicate identities and
 addresses.
 
+Changing a client's long-term public key is an approval replacement, not an
+in-place mutation. `PeerRegistry::replace` removes the old approval only when
+the new authorization passes all validation checks; invalid, expired, or
+conflicting replacements restore the old approval unchanged. A successful
+replacement immediately rejects the old public key.
+
 ## Data protection
 
 Noise IK provides the handshake boundary. Session data uses separate
