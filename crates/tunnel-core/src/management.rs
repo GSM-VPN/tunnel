@@ -34,6 +34,7 @@ pub const STATUS_OK: u16 = 200;
 pub const STATUS_BAD_REQUEST: u16 = 400;
 pub const STATUS_NOT_FOUND: u16 = 404;
 pub const STATUS_CONFLICT: u16 = 409;
+pub const STATUS_FORBIDDEN: u16 = 403;
 pub const STATUS_NOT_IMPLEMENTED: u16 = 501;
 pub const STATUS_UNAVAILABLE: u16 = 503;
 
@@ -108,7 +109,27 @@ impl ManagementService {
     /// Dispatches one decoded control-plane request.
     #[must_use]
     pub fn handle(&mut self, request: &ManagementRequest, now: SystemTime) -> ManagementResponse {
+        self.handle_with_permissions(request, now, true)
+    }
+
+    /// Dispatches a request after applying the server's mutation permission.
+    #[must_use]
+    pub fn handle_with_permissions(
+        &mut self,
+        request: &ManagementRequest,
+        now: SystemTime,
+        allow_mutations: bool,
+    ) -> ManagementResponse {
         self.expire_approvals(now);
+        if !allow_mutations && operation_mutates_state(request.operation) {
+            return ManagementResponse {
+                version: request.version,
+                request_id: request.request_id,
+                status: STATUS_FORBIDDEN,
+                error_code: 4,
+                payload: Vec::new(),
+            };
+        }
         let (status, error_code, payload) = match request.operation {
             OPERATION_INITIALIZE => self.initialize(&request.payload),
             OPERATION_START => self.start(&request.payload),
@@ -327,6 +348,16 @@ impl ManagementService {
         };
         (status, 0, label.as_bytes().to_vec())
     }
+}
+
+fn operation_mutates_state(operation: u16) -> bool {
+    !matches!(
+        operation,
+        OPERATION_GET_HEALTH
+            | OPERATION_GET_STATISTICS
+            | OPERATION_GET_SESSION
+            | OPERATION_LIST_SESSIONS
+    )
 }
 
 fn decode_session_payload(payload: &[u8]) -> Result<(u32, u64), ()> {
@@ -727,6 +758,35 @@ fn read_u64(frame: &[u8], start: usize) -> Result<u64, ManagementError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn read_only_permission_rejects_mutations_but_allows_health() {
+        let mut service = ManagementService::new(4, Metrics::default());
+        let initialize = ManagementRequest {
+            version: 1,
+            request_id: 1,
+            operation: OPERATION_INITIALIZE,
+            payload: Vec::new(),
+        };
+        assert_eq!(
+            service
+                .handle_with_permissions(&initialize, UNIX_EPOCH, false)
+                .status,
+            STATUS_FORBIDDEN
+        );
+        let health = ManagementRequest {
+            version: 1,
+            request_id: 2,
+            operation: OPERATION_GET_HEALTH,
+            payload: Vec::new(),
+        };
+        assert_eq!(
+            service
+                .handle_with_permissions(&health, UNIX_EPOCH, false)
+                .status,
+            STATUS_UNAVAILABLE
+        );
+    }
 
     #[test]
     fn request_matches_go_layout() {

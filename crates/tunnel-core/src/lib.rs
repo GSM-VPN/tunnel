@@ -46,9 +46,9 @@ pub use management::{
     OPERATION_GET_STATISTICS, OPERATION_INITIALIZE, OPERATION_LIST_SESSIONS,
     OPERATION_REGISTER_PEER, OPERATION_REMOVE_PEER, OPERATION_START, OPERATION_STOP,
     OPERATION_TERMINATE_SESSION, OPERATION_UPDATE_CONFIGURATION, PeerRegistrationPayload,
-    STATUS_BAD_REQUEST, STATUS_CONFLICT, STATUS_NOT_FOUND, STATUS_NOT_IMPLEMENTED, STATUS_OK,
-    STATUS_UNAVAILABLE, decode_peer_registration, decode_peer_removal, encode_peer_registration,
-    encode_peer_removal,
+    STATUS_BAD_REQUEST, STATUS_CONFLICT, STATUS_FORBIDDEN, STATUS_NOT_FOUND,
+    STATUS_NOT_IMPLEMENTED, STATUS_OK, STATUS_UNAVAILABLE, decode_peer_registration,
+    decode_peer_removal, encode_peer_registration, encode_peer_removal,
 };
 #[cfg(unix)]
 pub use management_server::UnixManagementServer;

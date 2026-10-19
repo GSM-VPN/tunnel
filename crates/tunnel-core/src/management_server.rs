@@ -7,6 +7,7 @@ use std::{
     time::SystemTime,
 };
 
+use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::{UnixListener, UnixStream};
 
@@ -19,6 +20,8 @@ pub struct UnixManagementServer {
     listener: UnixListener,
     socket_path: PathBuf,
     service: ManagementService,
+    owner_uid: u32,
+    allow_mutations: bool,
 }
 
 impl UnixManagementServer {
@@ -28,6 +31,22 @@ impl UnixManagementServer {
     ///
     /// Returns an I/O error if the path cannot be removed or bound.
     pub fn bind(path: impl AsRef<Path>, service: ManagementService) -> io::Result<Self> {
+        Self::bind_with_policy(path, service, true)
+    }
+
+    /// Binds a socket with an explicit mutating-operation policy.
+    ///
+    /// Read-only mode still permits health, statistics, and session reads, but
+    /// rejects engine, peer, session mutation, and configuration operations.
+    ///
+    /// # Errors
+    ///
+    /// Returns an I/O error if the path cannot be removed, bound, or inspected.
+    pub fn bind_with_policy(
+        path: impl AsRef<Path>,
+        service: ManagementService,
+        allow_mutations: bool,
+    ) -> io::Result<Self> {
         let socket_path = path.as_ref().to_path_buf();
         match std::fs::remove_file(&socket_path) {
             Ok(()) => {}
@@ -36,10 +55,13 @@ impl UnixManagementServer {
         }
         let listener = UnixListener::bind(&socket_path)?;
         std::fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o600))?;
+        let owner_uid = std::fs::metadata(&socket_path)?.uid();
         Ok(Self {
             listener,
             socket_path,
             service,
+            owner_uid,
+            allow_mutations,
         })
     }
 
@@ -51,6 +73,9 @@ impl UnixManagementServer {
     /// rejected by closing only the current connection.
     pub fn serve_once(&mut self) -> io::Result<()> {
         let (mut stream, _) = self.listener.accept()?;
+        if !peer_is_owner(&stream, self.owner_uid)? {
+            return Ok(());
+        }
         stream.set_read_timeout(Some(IPC_IO_TIMEOUT))?;
         stream.set_write_timeout(Some(IPC_IO_TIMEOUT))?;
         let Ok(frame) = read_frame(&mut stream) else {
@@ -59,12 +84,46 @@ impl UnixManagementServer {
         let Ok(request) = ManagementRequest::decode(&frame) else {
             return Ok(());
         };
-        let response = self.service.handle(&request, SystemTime::now());
+        let response =
+            self.service
+                .handle_with_permissions(&request, SystemTime::now(), self.allow_mutations);
         let encoded = response.encode().map_err(|_| {
             io::Error::new(io::ErrorKind::InvalidData, "response exceeds IPC limit")
         })?;
         stream.write_all(&encoded)
     }
+}
+
+#[cfg(target_os = "linux")]
+#[allow(unsafe_code)]
+fn peer_is_owner(stream: &UnixStream, owner_uid: u32) -> io::Result<bool> {
+    use std::{mem::MaybeUninit, os::fd::AsRawFd};
+
+    let mut credentials = MaybeUninit::<libc::ucred>::zeroed();
+    let mut length = libc::socklen_t::try_from(std::mem::size_of::<libc::ucred>())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "credential size overflow"))?;
+    let result = unsafe {
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            credentials.as_mut_ptr().cast(),
+            &raw mut length,
+        )
+    };
+    if result != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let credentials = unsafe { credentials.assume_init() };
+    Ok(credentials.uid == owner_uid)
+}
+
+#[cfg(not(target_os = "linux"))]
+#[allow(clippy::unnecessary_wraps)]
+fn peer_is_owner(_stream: &UnixStream, _owner_uid: u32) -> io::Result<bool> {
+    // The 0600 socket mode remains the authorization boundary on Unix hosts
+    // without a stable standard-library peer-credential API.
+    Ok(true)
 }
 
 impl Drop for UnixManagementServer {
