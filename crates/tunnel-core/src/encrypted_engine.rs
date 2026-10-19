@@ -153,6 +153,10 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
     /// Returns an encryption, protocol, or transport error.
     pub fn send_keepalive(&mut self) -> Result<usize, EncryptedTunnelError> {
         self.ensure_rotation_window()?;
+        let next_sequence = self
+            .next_sequence
+            .checked_add(1)
+            .ok_or(EncryptedTunnelError::SequenceExhausted)?;
         let header = TunnelHeader {
             version: PROTOCOL_VERSION,
             packet_type: PacketType::Keepalive,
@@ -163,10 +167,7 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
         };
         let packet = self.sender.seal(header, &[])?;
         let sent = self.transport.send(&packet.encode()?)?;
-        self.next_sequence = self
-            .next_sequence
-            .checked_add(1)
-            .ok_or(EncryptedTunnelError::SequenceExhausted)?;
+        self.next_sequence = next_sequence;
         Ok(sent)
     }
 
