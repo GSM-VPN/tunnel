@@ -108,6 +108,7 @@ impl ManagementService {
     /// Dispatches one decoded control-plane request.
     #[must_use]
     pub fn handle(&mut self, request: &ManagementRequest, now: SystemTime) -> ManagementResponse {
+        self.expire_approvals(now);
         let (status, error_code, payload) = match request.operation {
             OPERATION_INITIALIZE => self.initialize(&request.payload),
             OPERATION_START => self.start(&request.payload),
@@ -163,6 +164,22 @@ impl ManagementService {
             },
             now,
         )
+    }
+
+    fn expire_approvals(&mut self, now: SystemTime) {
+        let expired = self.peers.purge_expired(now);
+        for peer_id in expired {
+            let session_ids: Vec<_> = self
+                .sessions
+                .values()
+                .filter(|session| session.peer_id == peer_id)
+                .map(|session| session.session_id)
+                .collect();
+            for session_id in session_ids {
+                self.sessions.remove(&session_id);
+                self.metrics.session_closed();
+            }
+        }
     }
 
     fn initialize(&mut self, payload: &[u8]) -> (u16, u16, Vec<u8>) {

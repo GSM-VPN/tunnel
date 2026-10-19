@@ -139,6 +139,20 @@ impl PeerRegistry {
             .collect()
     }
 
+    /// Removes expired approvals and returns their peer IDs.
+    pub fn purge_expired(&mut self, now: SystemTime) -> Vec<u64> {
+        let expired: Vec<_> = self
+            .peers
+            .values()
+            .filter(|peer| peer.expires_at <= now)
+            .map(|peer| peer.peer_id)
+            .collect();
+        for peer_id in &expired {
+            self.peers.remove(peer_id);
+        }
+        expired
+    }
+
     /// Returns the number of registered approvals, including expired entries.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -231,5 +245,18 @@ mod tests {
             registry.register(duplicate_address, now),
             Err(PeerRegistryError::DuplicateAddress)
         );
+    }
+
+    #[test]
+    fn purges_expired_approvals_for_reallocation() {
+        let mut registry = PeerRegistry::new(1);
+        registry.register(peer(1, [1; 32]), UNIX_EPOCH).unwrap();
+        assert_eq!(
+            registry.purge_expired(UNIX_EPOCH + Duration::from_secs(120)),
+            vec![1]
+        );
+        assert!(registry.is_empty());
+        registry.register(peer(2, [2; 32]), UNIX_EPOCH).unwrap();
+        assert_eq!(registry.len(), 1);
     }
 }
