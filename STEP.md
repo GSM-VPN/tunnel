@@ -222,7 +222,7 @@ Tunnel Handshake / Encrypted Session
 - [x] `GATEWAY_SHARED_SECRET` 원문은 Rust Core IPC로 전달하지 않음
 - [x] `SERVER_PRIVATE_KEY`는 Rust Core의 장기 키 경계에서만 로딩
 - [x] TUN·라우팅 설정 권한과 데이터 플레인 권한을 가능한 한 분리
-- [ ] Socket 파일 접근 권한은 전용 서비스 사용자로 제한
+- [x] Socket 파일 접근 권한은 전용 서비스 사용자로 제한
 - [x] IPC 외부 네트워크 노출 금지
 - [ ] 이 연동은 기존 `vpn-server`의 설정·환경변수·API 형태와 호환되도록 구현
 
@@ -258,7 +258,7 @@ Tunnel Handshake / Encrypted Session
 - [x] IPC 포맷: 길이 프리픽스가 있는 버전 지정 바이너리 메시지
 - [x] IPC 요청에는 request ID와 operation code 포함
 - [x] IPC 연결은 외부 네트워크에 노출하지 않음
-- [ ] Socket 파일 권한은 전용 서비스 사용자만 접근 가능하도록 제한
+- [x] Socket 파일 권한은 전용 서비스 사용자만 접근 가능하도록 제한
 - [x] 데이터 패킷은 IPC를 통과하지 않음
 - [x] IPC에는 Peer·세션·설정·상태·메트릭 제어만 전달
 - [x] `GATEWAY_SHARED_SECRET` 원문은 IPC로 전달하지 않음

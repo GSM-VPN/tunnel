@@ -76,6 +76,12 @@ managed session table by the configured peer capacity (216 by default).
 Expired approvals are purged at the start of each management request, releasing
 their addresses and closing any associated sessions before the request runs.
 
+The Unix management socket is a local-only control boundary. The deployment
+service account owns the socket, the file mode is restricted to `0600`, and
+Linux clients are accepted only when `SO_PEERCRED` reports the same UID as the
+socket owner. Service-account creation and host permission changes remain
+deployment responsibilities.
+
 Automated security evidence covers successful and failed Noise handshakes,
 lifecycle transitions, replay-window rejection, malformed packet handling,
 and cross-session isolation. Fuzzing campaigns, DNS/IPv6 leak tests, Kill
