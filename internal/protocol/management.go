@@ -105,6 +105,9 @@ func UnmarshalRequestFrame(frame []byte) (ManagementRequest, error) {
 		Operation: Operation(binary.BigEndian.Uint16(frame[offset+10:])),
 		Payload:   append([]byte(nil), frame[offset+managementRequestSize:]...),
 	}
+	if request.Version == 0 {
+		return ManagementRequest{}, fmt.Errorf("%w: zero request version", ErrManagementFrameMalformed)
+	}
 	if !request.Operation.IsValid() {
 		return ManagementRequest{}, ErrUnknownOperation
 	}
@@ -147,13 +150,17 @@ func UnmarshalResponseFrame(frame []byte) (ManagementResponse, error) {
 		return ManagementResponse{}, fmt.Errorf("%w: response payload length", ErrManagementFrameMalformed)
 	}
 	offset := managementFrameHeaderSize
-	return ManagementResponse{
+	response := ManagementResponse{
 		Version:   binary.BigEndian.Uint16(frame[offset:]),
 		RequestID: binary.BigEndian.Uint64(frame[offset+2:]),
 		Status:    binary.BigEndian.Uint16(frame[offset+10:]),
 		ErrorCode: binary.BigEndian.Uint16(frame[offset+12:]),
 		Payload:   append([]byte(nil), frame[offset+managementResponseSize:]...),
-	}, nil
+	}
+	if response.Version == 0 {
+		return ManagementResponse{}, fmt.Errorf("%w: zero response version", ErrManagementFrameMalformed)
+	}
+	return response, nil
 }
 
 func validateFrame(frame []byte, minimumPayload int) error {

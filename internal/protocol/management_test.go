@@ -95,6 +95,18 @@ func TestManagementFrameRejectsTruncationAndOversize(t *testing.T) {
 	}
 }
 
+func TestManagementFrameRejectsZeroVersionOnDecode(t *testing.T) {
+	frame, err := (ManagementRequest{Version: ManagementVersion, RequestID: 1, Operation: OperationHealth}).MarshalFrame()
+	if err != nil {
+		t.Fatal(err)
+	}
+	frame[4] = 0
+	frame[5] = 0
+	if _, err := UnmarshalRequestFrame(frame); err == nil {
+		t.Fatal("expected zero request version error")
+	}
+}
+
 func TestPeerRegistrationPayloadRoundTripsStableLayout(t *testing.T) {
 	peer := PeerRegistration{
 		PeerID: 7, UserID: "user-7", PublicKey: [32]byte{3},
