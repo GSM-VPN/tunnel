@@ -430,6 +430,30 @@ impl LinuxClientRoutePlan {
         })
     }
 
+    /// Rebuilds the endpoint exception route after a network change.
+    ///
+    /// The new endpoint and gateway pass the same validation as initial plan
+    /// creation, so an endpoint cannot become tunnel-internal or cross address
+    /// families during a rebind.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same validation error as [`Self::new`] for an unsafe
+    /// interface, tunnel-internal endpoint, or address-family mismatch.
+    pub fn rebind_endpoint(
+        &self,
+        endpoint: SocketAddr,
+        gateway: IpAddr,
+    ) -> Result<Self, NetworkConfigError> {
+        Self::new(
+            self.tunnel_interface.clone(),
+            self.physical_interface.clone(),
+            endpoint,
+            gateway,
+            self.config.clone(),
+        )
+    }
+
     #[must_use]
     pub fn apply_commands(&self) -> Vec<NetworkCommand> {
         let (family_flag, endpoint_cidr) = match self.endpoint.ip() {
@@ -1132,6 +1156,33 @@ mod tests {
                 .any(|command| { command.args.first() == Some(&"-6".to_owned()) })
         );
         assert_eq!(plan.cleanup_commands().len(), 3);
+    }
+
+    #[test]
+    fn rebinds_endpoint_after_network_change_with_the_same_safety_checks() {
+        let plan = LinuxClientRoutePlan::new(
+            "gsm0",
+            "eth0",
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+            IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
+            TunnelNetworkConfig::default(),
+        )
+        .unwrap();
+        let rebound = plan
+            .rebind_endpoint(
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(198, 51, 100, 20)), 51_821),
+                IpAddr::V4(Ipv4Addr::new(198, 51, 100, 1)),
+            )
+            .unwrap();
+        assert_eq!(rebound.endpoint.port(), 51_821);
+        assert_eq!(rebound.apply_commands()[0].args[2], "198.51.100.20/32");
+        assert_eq!(
+            plan.rebind_endpoint(
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 80, 0, 9)), 51_821),
+                IpAddr::V4(Ipv4Addr::new(198, 51, 100, 1)),
+            ),
+            Err(NetworkConfigError::EndpointUsesTunnelAddress)
+        );
     }
 
     #[test]
