@@ -95,6 +95,11 @@ it does not include keys, packet contents, or user profile data. The Controller
 can therefore render per-peer connection state without transporting the data
 plane through Go.
 
+The final state byte uses the stable `LifecycleState` mapping `0=Disconnected`,
+`1=Connecting`, `2=Handshaking`, `3=Established`, `4=Rekeying`,
+`5=Reconnecting`, `6=Closing`, and `7=Closed`. Session creation and listing
+tests assert the record shape and the established-state value.
+
 `DnsUpstreamSelector` preserves the validated upstream order for a resolver
 adapter. A failed query advances to the next provider and wraps around after
 the last one; a successful query keeps the current provider selected. The
