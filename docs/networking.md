@@ -19,9 +19,17 @@ is derived from the configured MTU: `1400 - 24-byte header - 16-byte AEAD tag
 = 1360 bytes`. Invalid server addresses, zero ports, and MTUs below the
 IPv6-safe minimum are rejected before an engine starts.
 
+`MtuBudget::validate_inner_packet` validates a complete IPv4 or IPv6 packet
+against that encrypted payload budget. It identifies the address family,
+checks exact header and total lengths, verifies the IPv4 header checksum, and
+rejects IPv6 when dual-stack mode is disabled. Packet fragmentation and
+reassembly are outside the initial scope; callers should reject packets above
+the derived budget before encryption.
+
 Before enabling a full-tunnel route, preserve a route to the UDP endpoint.
 Before changing firewall rules, capture the existing rules and provide a
-rollback path. A Kill Switch is not implemented by the Rust library yet.
+rollback path. The Rust library only builds a declarative Kill Switch plan;
+the privileged adapter still owns rule application and rollback.
 
 Configuration validation does not apply routes, firewall rules, DNS settings,
 or NAT rules. Those operations remain in a privileged platform/deployment
@@ -67,7 +75,8 @@ when an IPv6 route is supplied to an IPv4-only plan. This makes restoration
 replayable after an interrupted cleanup without allowing arbitrary command
 arguments into the planner.
 
-`LinuxKillSwitchPlan` emits an optional nftables output chain with a default
+`TunnelNetworkConfig::kill_switch_plan` returns no plan unless `kill_switch`
+is explicitly enabled. `LinuxKillSwitchPlan` then emits an optional nftables output chain with a default
 drop policy. Loopback, tunnel-interface traffic, established/related
 traffic, and the VPN UDP Endpoint through the physical interface are allowed.
 Rollback deletes the dedicated nftables table. The plan does not execute
