@@ -124,7 +124,9 @@ separate privacy review before activation.
 `PeerRateLimiter` owns an independent bounded window per peer. Exhausting one
 peer's packet allowance does not consume another peer's allowance; the shared
 server queue and end-to-end fairness under load still require OS/network
-integration measurements.
+integration measurements. Management frames and UDP datagrams are bounded
+before parsing, and malformed datagrams are discarded without reaching the
+device, so invalid input has a fixed parser/work budget.
 
 Secret configuration follows a separate boundary: `GATEWAY_SHARED_SECRET` is
 kept by the Gateway/VPN service-authentication layer, while
