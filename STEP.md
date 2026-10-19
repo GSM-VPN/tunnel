@@ -414,7 +414,7 @@ Windows/Wintun
 - [x] Rust formatter 설정
 - [x] `go vet` 설정
 - [x] Rust Clippy 설정
-- [ ] 공통 오류 처리 규칙 정의
+- [x] 공통 오류 처리 규칙 정의
 - [x] 로그 레벨과 로그 포맷 정의
 - [x] 비밀값을 출력하지 않는 Debug/Display 규칙 정의
 - [x] 린트 및 포맷 검사 자동화
