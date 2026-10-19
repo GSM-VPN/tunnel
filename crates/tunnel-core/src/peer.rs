@@ -1,9 +1,9 @@
 //! Approved peer authorization state.
 
-use std::{collections::HashMap, time::SystemTime};
+use std::{collections::HashMap, fmt, time::SystemTime};
 
 /// A peer's approved network identity without secret material.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct PeerAuthorization {
     pub peer_id: u64,
     pub user_id: String,
@@ -14,13 +14,40 @@ pub struct PeerAuthorization {
 }
 
 /// Information safe to expose through status and metrics APIs.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct PeerSummary {
     pub peer_id: u64,
     pub user_id: String,
     pub ipv4: Option<std::net::Ipv4Addr>,
     pub ipv6: Option<std::net::Ipv6Addr>,
     pub expires_at: SystemTime,
+}
+
+impl fmt::Debug for PeerAuthorization {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PeerAuthorization")
+            .field("peer_id", &self.peer_id)
+            .field("user_id", &"[redacted]")
+            .field("public_key", &"[redacted]")
+            .field("ipv4", &self.ipv4)
+            .field("ipv6", &self.ipv6)
+            .field("expires_at", &self.expires_at)
+            .finish()
+    }
+}
+
+impl fmt::Debug for PeerSummary {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PeerSummary")
+            .field("peer_id", &self.peer_id)
+            .field("user_id", &"[redacted]")
+            .field("ipv4", &self.ipv4)
+            .field("ipv6", &self.ipv6)
+            .field("expires_at", &self.expires_at)
+            .finish()
+    }
 }
 
 impl From<&PeerAuthorization> for PeerSummary {
@@ -173,7 +200,7 @@ mod tests {
         time::{Duration, UNIX_EPOCH},
     };
 
-    use super::{PeerAuthorization, PeerRegistry, PeerRegistryError};
+    use super::{PeerAuthorization, PeerRegistry, PeerRegistryError, PeerSummary};
 
     fn peer(id: u64, key: [u8; 32]) -> PeerAuthorization {
         PeerAuthorization {
@@ -258,5 +285,16 @@ mod tests {
         assert!(registry.is_empty());
         registry.register(peer(2, [2; 32]), UNIX_EPOCH).unwrap();
         assert_eq!(registry.len(), 1);
+    }
+
+    #[test]
+    fn debug_output_redacts_peer_identity_fields() {
+        let peer = peer(7, [0xabu8; 32]);
+        let summary = PeerSummary::from(&peer);
+        for debug in [format!("{peer:?}"), format!("{summary:?}")] {
+            assert!(debug.contains("redacted"));
+            assert!(!debug.contains("user-7"));
+            assert!(!debug.contains("ab"));
+        }
     }
 }

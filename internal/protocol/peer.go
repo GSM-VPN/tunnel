@@ -91,5 +91,5 @@ func UnmarshalPeerRegistration(payload []byte) (PeerRegistration, error) {
 }
 
 func (peer PeerRegistration) String() string {
-	return fmt.Sprintf("peer=%d user=%s", peer.PeerID, peer.UserID)
+	return fmt.Sprintf("peer=%d", peer.PeerID)
 }
