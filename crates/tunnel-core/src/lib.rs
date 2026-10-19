@@ -16,6 +16,7 @@ mod linux_device;
 mod key_rotation;
 mod management;
 mod metrics;
+mod network;
 mod noise;
 mod peer;
 
@@ -36,6 +37,7 @@ pub use management::{
     decode_peer_registration, decode_peer_removal, encode_peer_registration, encode_peer_removal,
 };
 pub use metrics::{Metrics, MetricsSnapshot};
+pub use network::{MtuBudget, NetworkConfigError, TunnelNetworkConfig};
 pub use noise::{NOISE_IK_PARAMS, NoiseHandshake, NoiseHandshakeError, NoiseTransport};
 pub use peer::{PeerAuthorization, PeerRegistry, PeerRegistryError, PeerSummary};
 pub use protocol::{
