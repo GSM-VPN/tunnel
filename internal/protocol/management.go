@@ -77,6 +77,38 @@ type SessionStatus struct {
 	State     byte
 }
 
+// MetricsSnapshot is the secret-free Core metrics payload returned over IPC.
+type MetricsSnapshot struct {
+	ActiveSessions         uint64
+	TxBytes                uint64
+	RxBytes                uint64
+	TxPackets              uint64
+	RxPackets              uint64
+	AuthenticationFailures uint64
+	ReplayRejections       uint64
+	Reconnects             uint64
+	HandshakeFailures      uint64
+	KeepaliveFailures      uint64
+	PacketErrors           uint64
+}
+
+// UnmarshalMetrics decodes the fixed eleven-counter Core metrics payload.
+func UnmarshalMetrics(payload []byte) (MetricsSnapshot, error) {
+	if len(payload) != 11*8 {
+		return MetricsSnapshot{}, fmt.Errorf("invalid metrics payload length: %d", len(payload))
+	}
+	values := make([]uint64, 11)
+	for index := range values {
+		values[index] = binary.BigEndian.Uint64(payload[index*8:])
+	}
+	return MetricsSnapshot{
+		ActiveSessions: values[0], TxBytes: values[1], RxBytes: values[2],
+		TxPackets: values[3], RxPackets: values[4], AuthenticationFailures: values[5],
+		ReplayRejections: values[6], Reconnects: values[7], HandshakeFailures: values[8],
+		KeepaliveFailures: values[9], PacketErrors: values[10],
+	}, nil
+}
+
 // NetworkConfiguration contains the mutable network policy accepted by Core.
 type NetworkConfiguration struct {
 	UDPPort    uint16

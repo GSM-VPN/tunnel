@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/binary"
 	"reflect"
 	"testing"
 	"time"
@@ -96,6 +97,23 @@ func TestNetworkConfigurationPayloadUsesStableLayout(t *testing.T) {
 	want := []byte{16, 64, 0xca, 0x6c, 0x05, 0x78, 1, 0, 0, 0}
 	if !reflect.DeepEqual(payload, want) {
 		t.Fatalf("unexpected configuration payload: %v", payload)
+	}
+}
+
+func TestMetricsPayloadRoundTripsFixedCounters(t *testing.T) {
+	payload := make([]byte, 11*8)
+	for index := 0; index < 11; index++ {
+		binary.BigEndian.PutUint64(payload[index*8:], uint64(index+1))
+	}
+	metrics, err := UnmarshalMetrics(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metrics.ActiveSessions != 1 || metrics.HandshakeFailures != 9 || metrics.PacketErrors != 11 {
+		t.Fatalf("unexpected metrics snapshot: %+v", metrics)
+	}
+	if _, err := UnmarshalMetrics(payload[:8]); err == nil {
+		t.Fatal("expected malformed metrics payload to fail")
 	}
 }
 

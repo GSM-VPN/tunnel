@@ -46,6 +46,12 @@ same identifiers. `Stop` clears all sessions.
 and IPv6 `/64` prefixes, UDP port, MTU, dual-stack flag, and kill-switch flag.
 Configuration changes are accepted only while the Core is not running.
 
+`GetStatistics` returns an 88-byte payload of eleven big-endian `u64` values:
+active sessions, transmitted/received bytes, transmitted/received packets,
+authentication failures, replay rejections, reconnects, handshake failures,
+keepalive failures, and packet errors. The Go Controller exposes this payload
+as `protocol.MetricsSnapshot` through `Client.GetMetrics`.
+
 The Rust server applies mode `0600` to the Unix socket and bounds each
 connection's read and write operations to five seconds. Socket ownership,
 caller credentials, and operation-specific authorization must still be
