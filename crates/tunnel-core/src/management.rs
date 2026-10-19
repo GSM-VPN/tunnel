@@ -64,6 +64,7 @@ pub struct ManagementResponse {
 /// Rust Core control-plane state owned by the management server.
 pub struct ManagementService {
     peers: PeerRegistry,
+    max_sessions: usize,
     metrics: Metrics,
     state: EngineState,
     config: TunnelNetworkConfig,
@@ -91,6 +92,7 @@ impl ManagementService {
     pub fn new(max_peers: usize, metrics: Metrics) -> Self {
         Self {
             peers: PeerRegistry::new(max_peers),
+            max_sessions: max_peers,
             metrics,
             state: EngineState::Uninitialized,
             config: TunnelNetworkConfig::default(),
@@ -117,16 +119,12 @@ impl ManagementService {
                 },
                 Err(_) => (STATUS_BAD_REQUEST, 1, Vec::new()),
             },
-            OPERATION_REMOVE_PEER => match decode_peer_removal(&request.payload)
-                .map_err(|_| STATUS_BAD_REQUEST)
-                .and_then(|peer_id| {
-                    self.peers
-                        .revoke(peer_id)
-                        .map(|_| ())
-                        .map_err(|_| STATUS_NOT_FOUND)
-                }) {
-                Ok(()) => (STATUS_OK, 0, Vec::new()),
-                Err(status) => (status, 2, Vec::new()),
+            OPERATION_REMOVE_PEER => match decode_peer_removal(&request.payload) {
+                Ok(peer_id) => match self.remove_peer(peer_id) {
+                    Ok(()) => (STATUS_OK, 0, Vec::new()),
+                    Err(status) => (status, 2, Vec::new()),
+                },
+                Err(_) => (STATUS_BAD_REQUEST, 2, Vec::new()),
             },
             OPERATION_GET_HEALTH => self.health(),
             OPERATION_GET_STATISTICS => (STATUS_OK, 0, encode_metrics(&self.metrics)),
@@ -202,7 +200,11 @@ impl ManagementService {
         }
         match self.state {
             EngineState::Running | EngineState::Ready => {
+                let closed = self.sessions.len();
                 self.sessions.clear();
+                for _ in 0..closed {
+                    self.metrics.session_closed();
+                }
                 self.state = EngineState::Stopped;
                 (STATUS_OK, 0, Vec::new())
             }
@@ -224,6 +226,14 @@ impl ManagementService {
             .any(|peer| peer.peer_id == peer_id);
         if !peer_is_authorized {
             return (STATUS_NOT_FOUND, 2, Vec::new());
+        }
+        if self.sessions.len() >= self.max_sessions
+            || self
+                .sessions
+                .values()
+                .any(|session| session.peer_id == peer_id)
+        {
+            return (STATUS_CONFLICT, 4, Vec::new());
         }
         if self.sessions.contains_key(&session_id) {
             return (STATUS_CONFLICT, 4, Vec::new());
@@ -249,6 +259,21 @@ impl ManagementService {
         }
         self.metrics.session_closed();
         (STATUS_OK, 0, Vec::new())
+    }
+
+    fn remove_peer(&mut self, peer_id: u64) -> Result<(), u16> {
+        self.peers.revoke(peer_id).map_err(|_| STATUS_NOT_FOUND)?;
+        let session_ids: Vec<_> = self
+            .sessions
+            .values()
+            .filter(|session| session.peer_id == peer_id)
+            .map(|session| session.session_id)
+            .collect();
+        for session_id in session_ids {
+            self.sessions.remove(&session_id);
+            self.metrics.session_closed();
+        }
+        Ok(())
     }
 
     fn get_session(&self, payload: &[u8]) -> (u16, u16, Vec<u8>) {
@@ -794,6 +819,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn manages_engine_state_and_authorized_sessions() {
         let mut service = ManagementService::new(2, Metrics::default());
         let request = |operation, payload| ManagementRequest {
@@ -851,6 +877,18 @@ mod tests {
         );
         assert_eq!(created.status, STATUS_OK);
         assert_eq!(created.payload.len(), SESSION_PAYLOAD_SIZE + 1);
+        let mut duplicate_session = Vec::new();
+        duplicate_session.extend_from_slice(&10_u32.to_be_bytes());
+        duplicate_session.extend_from_slice(&7_u64.to_be_bytes());
+        assert_eq!(
+            service
+                .handle(
+                    &request(OPERATION_CREATE_SESSION, duplicate_session),
+                    UNIX_EPOCH
+                )
+                .status,
+            STATUS_CONFLICT
+        );
         assert_eq!(
             service
                 .handle(
@@ -874,6 +912,36 @@ mod tests {
                 .handle(
                     &request(OPERATION_GET_SESSION, vec![0; SESSION_PAYLOAD_SIZE]),
                     UNIX_EPOCH
+                )
+                .status,
+            STATUS_NOT_FOUND
+        );
+        let mut revocable_session = Vec::new();
+        revocable_session.extend_from_slice(&11_u32.to_be_bytes());
+        revocable_session.extend_from_slice(&7_u64.to_be_bytes());
+        assert_eq!(
+            service
+                .handle(
+                    &request(OPERATION_CREATE_SESSION, revocable_session.clone()),
+                    UNIX_EPOCH,
+                )
+                .status,
+            STATUS_OK
+        );
+        assert_eq!(
+            service
+                .handle(
+                    &request(OPERATION_REMOVE_PEER, encode_peer_removal(7)),
+                    UNIX_EPOCH,
+                )
+                .status,
+            STATUS_OK
+        );
+        assert_eq!(
+            service
+                .handle(
+                    &request(OPERATION_GET_SESSION, revocable_session),
+                    UNIX_EPOCH,
                 )
                 .status,
             STATUS_NOT_FOUND

@@ -41,6 +41,10 @@ state growth; platform adapters must invoke it before expensive processing.
 unique approval state. Reusing identity material or an address is rejected
 until the previous approval is revoked.
 
+Management peer revocation removes matching managed sessions immediately. The
+service also permits at most one active session per peer and bounds the total
+managed session table by the configured peer capacity (216 by default).
+
 ## Known gaps
 
 Noise IK handshake integration with the data-plane rekey flow, long-term
