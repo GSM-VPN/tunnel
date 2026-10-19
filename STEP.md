@@ -693,7 +693,7 @@ Device Interface
 
 ### 6.2. 클라이언트 라우팅
 
-- [ ] TUN 인터페이스에 VPN IP 할당
+- [x] TUN 인터페이스에 VPN IP 할당
 - [x] 기본 경로를 TUN으로 전환
 - [x] VPN 서버 Endpoint 예외 라우트 구성
 - [x] 라우팅 루프 방지
