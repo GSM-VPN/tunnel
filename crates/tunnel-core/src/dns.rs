@@ -28,6 +28,27 @@ pub struct DnsUpstream {
     pub transport: DnsTransport,
 }
 
+/// An endpoint for a resolver transport that is not represented by a socket
+/// address alone, such as DNS over TLS or DNS over HTTPS.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DnsSecureUpstream {
+    pub endpoint: String,
+    pub transport: DnsTransport,
+}
+
+/// Ordered resolver groups used while the VPN is active.
+///
+/// VPN upstreams are always attempted first. External upstreams are used only
+/// after the VPN group is exhausted, which lets a platform adapter implement a
+/// deliberate fallback policy without retaining query names or responses.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DnsResolverPolicy {
+    pub vpn_upstreams: Vec<DnsUpstream>,
+    pub external_upstreams: Vec<DnsUpstream>,
+    pub secure_upstreams: Vec<DnsSecureUpstream>,
+    pub search_domains: Vec<String>,
+}
+
 /// Secret-free counters for one configured upstream.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct DnsUpstreamMetrics {
@@ -176,6 +197,9 @@ pub enum DnsConfigError {
     InvalidInterfaceName,
     InvalidSearchDomain,
     InvalidCacheCapacity,
+    InvalidSecureEndpoint,
+    SecureTransportMismatch,
+    NoFallbackUpstreams,
 }
 
 impl DnsPolicy {
@@ -198,14 +222,96 @@ impl DnsPolicy {
     }
 }
 
+impl DnsSecureUpstream {
+    /// Validates a `DoT` authority or `DoH` URL without resolving or contacting it.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DnsConfigError::InvalidSecureEndpoint`] when the endpoint
+    /// does not match the selected secure transport.
+    pub fn new(
+        endpoint: impl Into<String>,
+        transport: DnsTransport,
+    ) -> Result<Self, DnsConfigError> {
+        let endpoint = endpoint.into();
+        if !valid_secure_endpoint(&endpoint, transport) {
+            return Err(DnsConfigError::InvalidSecureEndpoint);
+        }
+        Ok(Self {
+            endpoint,
+            transport,
+        })
+    }
+}
+
+impl DnsResolverPolicy {
+    /// Creates a VPN-first policy with an explicit external fallback group.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when all resolver groups are empty, an upstream is
+    /// invalid, a secure endpoint uses the wrong transport, or a search domain
+    /// is invalid.
+    pub fn new(
+        vpn_upstreams: Vec<DnsUpstream>,
+        external_upstreams: Vec<DnsUpstream>,
+        secure_upstreams: Vec<DnsSecureUpstream>,
+        search_domains: Vec<String>,
+    ) -> Result<Self, DnsConfigError> {
+        if vpn_upstreams.is_empty() && external_upstreams.is_empty() && secure_upstreams.is_empty()
+        {
+            return Err(DnsConfigError::NoFallbackUpstreams);
+        }
+        validate_search_domains(&search_domains)?;
+        validate_upstream_group(&vpn_upstreams)?;
+        validate_upstream_group(&external_upstreams)?;
+        if secure_upstreams
+            .iter()
+            .any(|upstream| !matches!(upstream.transport, DnsTransport::Dot | DnsTransport::Doh))
+        {
+            return Err(DnsConfigError::SecureTransportMismatch);
+        }
+        Ok(Self {
+            vpn_upstreams,
+            external_upstreams,
+            secure_upstreams,
+            search_domains,
+        })
+    }
+
+    /// Returns the plain upstreams in VPN-first order for a fallback adapter.
+    #[must_use]
+    pub fn ordered_upstreams(&self) -> Vec<DnsUpstream> {
+        self.vpn_upstreams
+            .iter()
+            .chain(&self.external_upstreams)
+            .cloned()
+            .collect()
+    }
+
+    /// Returns a selector that starts with the first VPN upstream when present.
+    #[must_use]
+    pub fn selector(&self) -> Option<DnsUpstreamSelector> {
+        let upstreams = self.ordered_upstreams();
+        if upstreams.is_empty() {
+            return None;
+        }
+        Some(DnsUpstreamSelector::from_upstreams(upstreams))
+    }
+}
+
 impl DnsUpstreamSelector {
     /// Creates a selector from an already validated policy.
     #[must_use]
     pub fn from_policy(policy: &DnsPolicy) -> Self {
+        Self::from_upstreams(policy.upstreams.clone())
+    }
+
+    fn from_upstreams(upstreams: Vec<DnsUpstream>) -> Self {
         Self {
-            upstreams: policy.upstreams.clone(),
+            metrics: vec![DnsUpstreamMetrics::default(); upstreams.len()],
+            upstreams,
             current: 0,
-            metrics: vec![DnsUpstreamMetrics::default(); policy.upstreams.len()],
         }
     }
 
@@ -366,6 +472,16 @@ fn validate_upstreams(upstreams: &[DnsUpstream]) -> Result<(), DnsConfigError> {
     Ok(())
 }
 
+fn validate_upstream_group(upstreams: &[DnsUpstream]) -> Result<(), DnsConfigError> {
+    if upstreams.len() > MAX_UPSTREAMS {
+        return Err(DnsConfigError::TooManyUpstreams);
+    }
+    for upstream in upstreams {
+        validate_upstream(upstream)?;
+    }
+    Ok(())
+}
+
 fn validate_upstream(upstream: &DnsUpstream) -> Result<(), DnsConfigError> {
     if upstream.port == 0 {
         return Err(DnsConfigError::InvalidPort);
@@ -393,6 +509,32 @@ fn validate_search_domains(domains: &[String]) -> Result<(), DnsConfigError> {
         return Err(DnsConfigError::InvalidSearchDomain);
     }
     Ok(())
+}
+
+fn valid_secure_endpoint(endpoint: &str, transport: DnsTransport) -> bool {
+    if endpoint.is_empty()
+        || endpoint.chars().any(char::is_whitespace)
+        || endpoint.contains('#')
+        || endpoint.contains('?')
+    {
+        return false;
+    }
+    match transport {
+        DnsTransport::Dot => {
+            if endpoint.contains('/') {
+                return false;
+            }
+            endpoint
+                .rsplit_once(':')
+                .and_then(|(host, port)| port.parse::<u16>().ok().map(|port| (host, port)))
+                .is_some_and(|(host, port)| !host.is_empty() && port == 853)
+        }
+        DnsTransport::Doh => endpoint.strip_prefix("https://").is_some_and(|authority| {
+            let (host, path) = authority.split_once('/').unwrap_or((authority, ""));
+            !host.is_empty() && (path == "dns-query" || path.starts_with("dns-query/"))
+        }),
+        DnsTransport::Udp | DnsTransport::Tcp => false,
+    }
 }
 
 fn valid_interface_name(name: &str) -> bool {
@@ -566,5 +708,44 @@ mod tests {
         assert_eq!(cache.len(), 1);
         assert_eq!(cache.get(7, now), Some([4].as_slice()));
         assert!(cache.get(8, now).is_none());
+    }
+
+    #[test]
+    fn validates_secure_dot_and_doh_endpoints() {
+        let dot = super::DnsSecureUpstream::new("resolver.example:853", DnsTransport::Dot).unwrap();
+        assert_eq!(dot.transport, DnsTransport::Dot);
+        let doh =
+            super::DnsSecureUpstream::new("https://resolver.example/dns-query", DnsTransport::Doh)
+                .unwrap();
+        assert_eq!(doh.endpoint, "https://resolver.example/dns-query");
+        assert!(super::DnsSecureUpstream::new("resolver.example:443", DnsTransport::Dot).is_err());
+        assert!(super::DnsSecureUpstream::new(":853", DnsTransport::Dot).is_err());
+        assert!(
+            super::DnsSecureUpstream::new("http://resolver.example/dns-query", DnsTransport::Doh)
+                .is_err()
+        );
+        assert!(super::DnsSecureUpstream::new("https:///dns-query", DnsTransport::Doh).is_err());
+    }
+
+    #[test]
+    fn prefers_vpn_upstreams_before_external_fallbacks() {
+        let policy = super::DnsResolverPolicy::new(
+            vec![upstream("10.0.0.53".parse().unwrap())],
+            vec![upstream("1.1.1.1".parse().unwrap())],
+            vec![],
+            vec![],
+        )
+        .unwrap();
+        let mut selector = policy.selector().unwrap();
+        assert_eq!(
+            selector.current().address,
+            "10.0.0.53".parse::<IpAddr>().unwrap()
+        );
+        selector.record_failure();
+        assert_eq!(
+            selector.current().address,
+            "1.1.1.1".parse::<IpAddr>().unwrap()
+        );
+        assert!(super::DnsResolverPolicy::new(vec![], vec![], vec![], vec![]).is_err());
     }
 }
