@@ -1,0 +1,32 @@
+name: Release build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux release build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Build release binary
+        run: cargo build --workspace --release
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tunnel-core-linux-${{ github.ref_name }}
+          path: target/release/tunnel-core
+          if-no-files-found: error

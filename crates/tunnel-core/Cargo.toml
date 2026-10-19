@@ -28,3 +28,7 @@ proptest = "1"
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+[[bench]]
+name = "codec"
+harness = false
+
