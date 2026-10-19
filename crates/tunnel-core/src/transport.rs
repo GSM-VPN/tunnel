@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::io;
 use std::net::{SocketAddr, UdpSocket};
 use std::time::Duration;
@@ -16,6 +17,81 @@ pub enum TransportError {
         maximum: usize,
     },
     Io(io::ErrorKind),
+}
+
+/// Queue admission errors for an asynchronous UDP adapter.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DatagramQueueError {
+    InvalidLimits,
+    PacketLimit,
+    ByteLimit,
+}
+
+/// Bounded ownership queue for datagrams.
+pub struct DatagramQueue {
+    max_packets: usize,
+    max_bytes: usize,
+    bytes: usize,
+    packets: VecDeque<Vec<u8>>,
+}
+
+impl DatagramQueue {
+    /// Creates a queue with positive packet-count and byte limits.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DatagramQueueError::InvalidLimits`] when either limit is zero.
+    pub fn new(max_packets: usize, max_bytes: usize) -> Result<Self, DatagramQueueError> {
+        if max_packets == 0 || max_bytes == 0 {
+            return Err(DatagramQueueError::InvalidLimits);
+        }
+        Ok(Self {
+            max_packets,
+            max_bytes,
+            bytes: 0,
+            packets: VecDeque::with_capacity(max_packets),
+        })
+    }
+
+    /// Moves one datagram into the queue without copying it.
+    ///
+    /// # Errors
+    ///
+    /// Returns a packet or byte limit error when admitting the datagram would
+    /// exceed the configured queue bounds.
+    pub fn push(&mut self, packet: Vec<u8>) -> Result<(), DatagramQueueError> {
+        if self.packets.len() >= self.max_packets {
+            return Err(DatagramQueueError::PacketLimit);
+        }
+        if packet.len() > self.max_bytes.saturating_sub(self.bytes) {
+            return Err(DatagramQueueError::ByteLimit);
+        }
+        self.bytes += packet.len();
+        self.packets.push_back(packet);
+        Ok(())
+    }
+
+    /// Returns the oldest datagram and its owned allocation.
+    pub fn pop(&mut self) -> Option<Vec<u8>> {
+        let packet = self.packets.pop_front()?;
+        self.bytes -= packet.len();
+        Some(packet)
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.packets.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.packets.is_empty()
+    }
+
+    #[must_use]
+    pub fn bytes(&self) -> usize {
+        self.bytes
+    }
 }
 
 /// UDP datagram transport used by the tunnel protocol.
@@ -119,7 +195,7 @@ impl UdpTransport {
 
 #[cfg(test)]
 mod tests {
-    use super::{TransportError, UdpTransport};
+    use super::{DatagramQueue, DatagramQueueError, TransportError, UdpTransport};
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::time::Duration;
 
@@ -207,5 +283,25 @@ mod tests {
                 actual: sender.local_addr().expect("sender address"),
             })
         );
+    }
+
+    #[test]
+    fn bounds_queue_packets_and_bytes_without_copying_buffers() {
+        assert!(matches!(
+            DatagramQueue::new(0, 1),
+            Err(DatagramQueueError::InvalidLimits)
+        ));
+        let mut queue = DatagramQueue::new(2, 5).expect("queue creates");
+        let packet = vec![1, 2, 3];
+        let pointer = packet.as_ptr();
+        queue.push(packet).expect("packet enqueues");
+        assert_eq!(queue.bytes(), 3);
+        let dequeued = queue.pop().expect("packet dequeues");
+        assert_eq!(dequeued.as_ptr(), pointer);
+        assert!(queue.is_empty());
+        queue.push(vec![1, 2, 3, 4]).expect("packet enqueues");
+        assert_eq!(queue.push(vec![5, 6]), Err(DatagramQueueError::ByteLimit));
+        queue.push(vec![5]).expect("packet enqueues");
+        assert_eq!(queue.push(vec![9]), Err(DatagramQueueError::PacketLimit));
     }
 }
