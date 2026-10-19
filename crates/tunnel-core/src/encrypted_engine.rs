@@ -101,6 +101,41 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
         self.transmitted_bytes
     }
 
+    #[must_use]
+    pub const fn key_generation(&self) -> crate::KeyGeneration {
+        self.sender.key_generation()
+    }
+
+    /// Installs new directional keys from an authenticated re-handshake.
+    ///
+    /// The sender and receiver must move to the same strictly newer
+    /// generation. Replay windows, sequence numbers, byte counters, and the
+    /// age threshold are reset together so the old generation cannot be
+    /// reused.
+    ///
+    /// # Errors
+    ///
+    /// Returns a crypto error when the generations are inconsistent or the
+    /// requested generation is not newer than the active one.
+    pub fn rekey(
+        &mut self,
+        sender_key: [u8; 32],
+        receiver_key: [u8; 32],
+        key_generation: crate::KeyGeneration,
+    ) -> Result<(), EncryptedTunnelError> {
+        if self.sender.key_generation() != self.receiver.key_generation()
+            || key_generation.0 <= self.sender.key_generation().0
+        {
+            return Err(crate::CryptoError::InvalidKeyGeneration.into());
+        }
+        self.sender.rekey(sender_key, key_generation)?;
+        self.receiver.rekey(receiver_key, key_generation)?;
+        self.next_sequence = 0;
+        self.transmitted_bytes = 0;
+        self.started_at = Instant::now();
+        Ok(())
+    }
+
     fn ensure_rotation_window(&self) -> Result<(), EncryptedTunnelError> {
         if let Some(reason) = self.rotation_policy.rotation_reason(
             self.started_at.elapsed(),
@@ -136,7 +171,7 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
             flags: 0,
             session_id: self.session_id,
             sequence_number: SequenceNumber(self.next_sequence),
-            key_generation: crate::KeyGeneration(0),
+            key_generation: self.sender.key_generation(),
         };
         let packet = self.sender.seal(header, &payload)?;
         let encoded = packet.encode()?;
@@ -163,7 +198,7 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
             flags: 0,
             session_id: self.session_id,
             sequence_number: SequenceNumber(self.next_sequence),
-            key_generation: crate::KeyGeneration(0),
+            key_generation: self.sender.key_generation(),
         };
         let packet = self.sender.seal(header, &[])?;
         let sent = self.transport.send(&packet.encode()?)?;
@@ -279,6 +314,27 @@ mod tests {
                 RotationReason::Bytes
             ))
         );
+    }
+
+    #[test]
+    fn rekey_resets_data_counters_and_generation() {
+        let session = SessionId::new(14).expect("session ID");
+        let (device, _) = MemoryDevice::pair(1_400);
+        let client_transport = UdpTransport::bind(loopback(), 1_400).expect("client binds");
+        let server_transport = UdpTransport::bind(loopback(), 1_400).expect("server binds");
+        let mut tunnel = EncryptedTunnel::new(
+            device,
+            client_transport,
+            SessionCipher::new([1; 32], session, KeyGeneration(0), 1),
+            SessionCipher::new([2; 32], session, KeyGeneration(0), 2),
+            session,
+        );
+        tunnel
+            .transport
+            .set_remote(server_transport.local_addr().expect("server address"));
+        tunnel.rekey([3; 32], [4; 32], KeyGeneration(1)).unwrap();
+        assert_eq!(tunnel.key_generation(), KeyGeneration(1));
+        assert_eq!(tunnel.transmitted_bytes(), 0);
     }
 
     #[test]

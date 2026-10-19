@@ -146,6 +146,32 @@ impl SessionCipher {
         }
     }
 
+    #[must_use]
+    pub const fn key_generation(&self) -> KeyGeneration {
+        self.key_generation
+    }
+
+    /// Installs a key from a newly authenticated handshake generation.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidKeyGeneration` when the generation is not strictly newer
+    /// than the active generation. The key and replay state remain unchanged
+    /// in that case.
+    pub fn rekey(
+        &mut self,
+        key: [u8; 32],
+        key_generation: KeyGeneration,
+    ) -> Result<(), CryptoError> {
+        if key_generation.0 <= self.key_generation.0 {
+            return Err(CryptoError::InvalidKeyGeneration);
+        }
+        self.key = key;
+        self.key_generation = key_generation;
+        self.replay = ReplayWindow::new();
+        Ok(())
+    }
+
     /// Encrypts a payload and returns an authenticated tunnel packet.
     ///
     /// # Errors
@@ -269,6 +295,39 @@ mod tests {
             receiver.open(&valid).expect("valid packet opens"),
             b"secret"
         );
+    }
+
+    #[test]
+    fn rekey_resets_generation_and_replay_window() {
+        let session = SessionId::new(7).expect("session ID");
+        let old_key = [7; 32];
+        let new_key = [8; 32];
+        let mut receiver = SessionCipher::new(old_key, session, KeyGeneration(2), 1);
+        let mut sender = SessionCipher::new(old_key, session, KeyGeneration(2), 1);
+        let old_packet = sender.seal(header(0), b"old").expect("old packet");
+        assert_eq!(receiver.open(&old_packet).unwrap(), b"old");
+
+        sender.rekey(new_key, KeyGeneration(3)).unwrap();
+        receiver.rekey(new_key, KeyGeneration(3)).unwrap();
+        assert_eq!(sender.key_generation(), KeyGeneration(3));
+        assert_eq!(
+            receiver.open(&old_packet),
+            Err(CryptoError::InvalidKeyGeneration)
+        );
+
+        let new_packet = sender.seal(header(0), b"new").expect("new packet");
+        assert_eq!(receiver.open(&new_packet).unwrap(), b"new");
+    }
+
+    #[test]
+    fn rejects_non_monotonic_rekey_without_changing_active_key() {
+        let session = SessionId::new(7).expect("session ID");
+        let mut cipher = SessionCipher::new([7; 32], session, KeyGeneration(2), 1);
+        assert_eq!(
+            cipher.rekey([8; 32], KeyGeneration(2)),
+            Err(CryptoError::InvalidKeyGeneration)
+        );
+        assert_eq!(cipher.key_generation(), KeyGeneration(2));
     }
 
     #[test]
