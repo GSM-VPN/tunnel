@@ -52,6 +52,9 @@ state growth; platform adapters must invoke it before expensive processing.
 `PeerRegistry` treats client public keys and assigned IPv4/IPv6 addresses as
 unique approval state. Reusing identity material or an address is rejected
 until the previous approval is revoked.
+Noise responder creation can consume this registry directly: unknown,
+mismatched, or expired approvals are rejected before allocating handshake
+state, and the Noise message still authenticates the same public key.
 
 Management peer revocation removes matching managed sessions immediately. The
 service also permits at most one active session per peer and bounds the total
