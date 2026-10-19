@@ -214,22 +214,22 @@ Tunnel Handshake / Encrypted Session
 
 #### Go–Rust IPC와 권한
 
-- [ ] Go Controller와 Rust Core는 별도 프로세스로 실행
-- [ ] 초기 IPC는 Unix Domain Socket 사용
-- [ ] IPC는 길이 프리픽스 바이너리 메시지 사용
-- [ ] IPC 요청에는 버전, request ID, operation code, payload length 포함
-- [ ] IPC 응답에는 request ID, status code, error code, payload 포함
-- [ ] `GATEWAY_SHARED_SECRET` 원문은 Rust Core IPC로 전달하지 않음
-- [ ] `SERVER_PRIVATE_KEY`는 Rust Core의 장기 키 경계에서만 로딩
-- [ ] TUN·라우팅 설정 권한과 데이터 플레인 권한을 가능한 한 분리
+- [x] Go Controller와 Rust Core는 별도 프로세스로 실행
+- [x] 초기 IPC는 Unix Domain Socket 사용
+- [x] IPC는 길이 프리픽스 바이너리 메시지 사용
+- [x] IPC 요청에는 버전, request ID, operation code, payload length 포함
+- [x] IPC 응답에는 request ID, status code, error code, payload 포함
+- [x] `GATEWAY_SHARED_SECRET` 원문은 Rust Core IPC로 전달하지 않음
+- [x] `SERVER_PRIVATE_KEY`는 Rust Core의 장기 키 경계에서만 로딩
+- [x] TUN·라우팅 설정 권한과 데이터 플레인 권한을 가능한 한 분리
 - [ ] Socket 파일 접근 권한은 전용 서비스 사용자로 제한
-- [ ] IPC 외부 네트워크 노출 금지
+- [x] IPC 외부 네트워크 노출 금지
 - [ ] 이 연동은 기존 `vpn-server`의 설정·환경변수·API 형태와 호환되도록 구현
 
 #### 서버 자원 제한
 
-- [ ] 목표 동시 사용자: 216명 이하
-- [ ] 사용자당 기본 세션 수: 1개
+- [x] 목표 동시 사용자: 216명 이하
+- [x] 사용자당 기본 세션 수: 1개
 - [x] 핸드셰이크 Rate Limit 적용
 - [x] 사용자별 패킷 Rate Limit 적용
 - [ ] 전체 서버 UDP 수신 큐와 송신 큐 상한 설정
