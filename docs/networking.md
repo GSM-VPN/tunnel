@@ -53,7 +53,10 @@ domains. It can represent UDP, TCP, DoT, and DoH transports for a future
 resolver implementation, while `LinuxDnsPlan` currently emits only the
 `resolvectl` form supported by the host adapter: port 53 over UDP or TCP.
 The ordered list is retained so a resolver adapter can implement upstream
-fallback without changing the control-plane model.
+fallback without changing the control-plane model. This means DoT/DoH values
+are configuration-model placeholders only: the current Linux application does
+not establish encrypted DNS connections, and callers must not advertise those
+transports as active until a dedicated adapter and integration test exist.
 
 Before applying a tunnel policy, capture the current resolver addresses and
 domains in `DnsSnapshot`. `LinuxDnsPlan::restore_commands` first reverts the
