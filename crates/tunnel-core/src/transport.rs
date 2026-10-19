@@ -19,6 +19,19 @@ pub enum TransportError {
     Io(io::ErrorKind),
 }
 
+impl TransportError {
+    /// Returns whether the operation may succeed when retried later.
+    #[must_use]
+    pub const fn is_transient(&self) -> bool {
+        matches!(
+            self,
+            Self::Io(
+                io::ErrorKind::WouldBlock | io::ErrorKind::Interrupted | io::ErrorKind::TimedOut
+            )
+        )
+    }
+}
+
 /// Queue admission errors for an asynchronous UDP adapter.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DatagramQueueError {
@@ -126,6 +139,24 @@ impl UdpTransport {
     /// Sets the remote endpoint used by [`Self::send`].
     pub fn set_remote(&mut self, remote: SocketAddr) {
         self.remote = Some(remote);
+    }
+
+    /// Rebinds an active socket while preserving its configured remote.
+    ///
+    /// The replacement socket is bound before the current socket is dropped,
+    /// so a failed bind leaves the existing transport usable.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportError::Closed`] when the transport has already been
+    /// closed, or [`TransportError::Io`] when the replacement cannot bind.
+    pub fn rebind(&mut self, local: SocketAddr) -> Result<(), TransportError> {
+        if self.socket.is_none() {
+            return Err(TransportError::Closed);
+        }
+        let socket = UdpSocket::bind(local).map_err(|error| TransportError::Io(error.kind()))?;
+        self.socket = Some(socket);
+        Ok(())
     }
 
     /// Reports whether `close` has already been called.
@@ -303,5 +334,25 @@ mod tests {
         assert_eq!(queue.push(vec![5, 6]), Err(DatagramQueueError::ByteLimit));
         queue.push(vec![5]).expect("packet enqueues");
         assert_eq!(queue.push(vec![9]), Err(DatagramQueueError::PacketLimit));
+    }
+
+    #[test]
+    fn rebinds_active_socket_and_preserves_remote_endpoint() {
+        let mut sender = UdpTransport::bind(loopback(), 1_400).expect("sender binds");
+        let receiver = UdpTransport::bind(loopback(), 1_400).expect("receiver binds");
+        sender.set_remote(receiver.local_addr().expect("receiver address"));
+        sender.rebind(loopback()).expect("sender rebinds");
+        sender.send(b"rebound").expect("datagram sends");
+        let mut buffer = [0; 1_400];
+        let (length, _) = receiver.receive(&mut buffer).expect("datagram receives");
+        assert_eq!(&buffer[..length], b"rebound");
+    }
+
+    #[test]
+    fn classifies_retryable_socket_errors() {
+        assert!(TransportError::Io(std::io::ErrorKind::WouldBlock).is_transient());
+        assert!(TransportError::Io(std::io::ErrorKind::Interrupted).is_transient());
+        assert!(TransportError::Io(std::io::ErrorKind::TimedOut).is_transient());
+        assert!(!TransportError::Closed.is_transient());
     }
 }
