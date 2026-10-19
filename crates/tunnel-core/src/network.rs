@@ -43,6 +43,8 @@ pub enum NetworkConfigError {
     InvalidInterfaceName,
     EndpointUsesTunnelAddress,
     EndpointGatewayFamilyMismatch,
+    ClientIpv4OutsideNetwork,
+    ClientIpv6OutsideNetwork,
 }
 
 /// One argv-safe command emitted by the privileged Linux network adapter.
@@ -78,6 +80,119 @@ pub struct LinuxClientRoutePlan {
     pub endpoint: SocketAddr,
     pub gateway: IpAddr,
     pub config: TunnelNetworkConfig,
+}
+
+/// Validated client TUN addressing plus route transition and cleanup plan.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LinuxClientNetworkPlan {
+    pub tunnel_interface: String,
+    pub tunnel_ipv4: Ipv4Addr,
+    pub tunnel_ipv6: Option<Ipv6Addr>,
+    pub routes: LinuxClientRoutePlan,
+}
+
+impl LinuxClientNetworkPlan {
+    /// Creates a client network plan without executing host mutations.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the interface does not match the route plan or
+    /// either client address is outside the configured tunnel network.
+    pub fn new(
+        tunnel_interface: impl Into<String>,
+        tunnel_ipv4: Ipv4Addr,
+        tunnel_ipv6: Option<Ipv6Addr>,
+        routes: LinuxClientRoutePlan,
+    ) -> Result<Self, NetworkConfigError> {
+        let tunnel_interface = tunnel_interface.into();
+        if !valid_interface_name(&tunnel_interface) || tunnel_interface != routes.tunnel_interface {
+            return Err(NetworkConfigError::InvalidInterfaceName);
+        }
+        if !contains_ipv4(
+            routes.config.ipv4_network,
+            routes.config.ipv4_prefix,
+            tunnel_ipv4,
+        ) {
+            return Err(NetworkConfigError::ClientIpv4OutsideNetwork);
+        }
+        if routes.config.dual_stack
+            && tunnel_ipv6.is_some_and(|address| {
+                !contains_ipv6(
+                    routes.config.ipv6_network,
+                    routes.config.ipv6_prefix,
+                    address,
+                )
+            })
+        {
+            return Err(NetworkConfigError::ClientIpv6OutsideNetwork);
+        }
+        if !routes.config.dual_stack && tunnel_ipv6.is_some() {
+            return Err(NetworkConfigError::InvalidIpv6Prefix);
+        }
+        Ok(Self {
+            tunnel_interface,
+            tunnel_ipv4,
+            tunnel_ipv6,
+            routes,
+        })
+    }
+
+    #[must_use]
+    pub fn apply_commands(&self) -> Vec<NetworkCommand> {
+        let mut commands = vec![NetworkCommand::new(
+            "ip",
+            [
+                "address".to_owned(),
+                "replace".to_owned(),
+                format!("{}/{}", self.tunnel_ipv4, self.routes.config.ipv4_prefix),
+                "dev".to_owned(),
+                self.tunnel_interface.clone(),
+            ],
+        )];
+        if let Some(address) = self.tunnel_ipv6 {
+            commands.push(NetworkCommand::new(
+                "ip",
+                [
+                    "-6".to_owned(),
+                    "address".to_owned(),
+                    "replace".to_owned(),
+                    format!("{}/{}", address, self.routes.config.ipv6_prefix),
+                    "dev".to_owned(),
+                    self.tunnel_interface.clone(),
+                ],
+            ));
+        }
+        commands.extend(self.routes.apply_commands());
+        commands
+    }
+
+    #[must_use]
+    pub fn cleanup_commands(&self) -> Vec<NetworkCommand> {
+        let mut commands = self.routes.cleanup_commands();
+        if let Some(address) = self.tunnel_ipv6 {
+            commands.push(NetworkCommand::new(
+                "ip",
+                [
+                    "-6".to_owned(),
+                    "address".to_owned(),
+                    "del".to_owned(),
+                    format!("{}/{}", address, self.routes.config.ipv6_prefix),
+                    "dev".to_owned(),
+                    self.tunnel_interface.clone(),
+                ],
+            ));
+        }
+        commands.push(NetworkCommand::new(
+            "ip",
+            [
+                "address".to_owned(),
+                "del".to_owned(),
+                format!("{}/{}", self.tunnel_ipv4, self.routes.config.ipv4_prefix),
+                "dev".to_owned(),
+            ],
+        ));
+        commands
+    }
 }
 
 impl LinuxClientRoutePlan {
@@ -502,7 +617,8 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
     use super::{
-        LinuxClientRoutePlan, LinuxNetworkPlan, MtuBudget, NetworkConfigError, TunnelNetworkConfig,
+        LinuxClientNetworkPlan, LinuxClientRoutePlan, LinuxNetworkPlan, MtuBudget,
+        NetworkConfigError, TunnelNetworkConfig,
     };
 
     #[test]
@@ -660,5 +776,41 @@ mod tests {
             ),
             Err(NetworkConfigError::EndpointGatewayFamilyMismatch)
         );
+    }
+
+    #[test]
+    fn builds_client_address_and_route_transition_with_reverse_cleanup() {
+        let routes = LinuxClientRoutePlan::new(
+            "gsm0",
+            "eth0",
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+            IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
+            TunnelNetworkConfig::default(),
+        )
+        .unwrap();
+        let plan = LinuxClientNetworkPlan::new(
+            "gsm0",
+            Ipv4Addr::new(10, 80, 0, 2),
+            Some("fd80:1234:5678::2".parse().unwrap()),
+            routes,
+        )
+        .unwrap();
+        let commands = plan.apply_commands();
+        assert_eq!(
+            commands[0].args[0..3],
+            ["address", "replace", "10.80.0.2/16"]
+        );
+        assert!(commands.iter().any(|command| {
+            command.args
+                == vec![
+                    "-6",
+                    "address",
+                    "replace",
+                    "fd80:1234:5678::2/64",
+                    "dev",
+                    "gsm0",
+                ]
+        }));
+        assert_eq!(plan.cleanup_commands().last().unwrap().args[1], "del");
     }
 }
