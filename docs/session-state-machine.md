@@ -10,7 +10,7 @@ DISCONNECTED → CONNECTING → HANDSHAKING → ESTABLISHED
                                 CLOSING → CLOSED
 ```
 
-Defaults are a five-second handshake timeout, five handshake attempts,
+Defaults are a five-second handshake timeout, five bounded handshake attempts,
 25-second keepalive threshold, 120-second idle timeout, and reconnect backoff
 from one to 60 seconds with ten reconnect attempts.
 
@@ -25,7 +25,8 @@ Authentication failure, permission revocation, server shutdown, and an
 explicit close enter `CLOSING` from every non-terminal state, including a
 session that is still reconnecting. A failed rekey also enters `CLOSING`
 instead of reusing the previous data-key generation. None of these paths
-enter an unbounded retry loop. Successful handshakes reset reconnect attempts.
+enter an unbounded retry loop. Successful handshakes reset both handshake and
+reconnect attempts; reaching the handshake limit enters `CLOSING`.
 
 The encrypted data path exposes a rekey boundary for authenticated
 handshake results. A replacement must use a strictly newer key generation and
