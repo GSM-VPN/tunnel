@@ -212,4 +212,37 @@ mod tests {
             Err(TunnelError::UnexpectedSession { .. })
         ));
     }
+
+    #[test]
+    fn discards_malformed_datagrams_and_keeps_the_receive_loop_alive() {
+        let (mut sender_device, receiver_device) = MemoryDevice::pair(1_400);
+        sender_device
+            .inject(b"valid packet")
+            .expect("packet injects");
+        let mut sender_transport = UdpTransport::bind(loopback(), 1_400).expect("sender binds");
+        let receiver_transport = UdpTransport::bind(loopback(), 1_400).expect("receiver binds");
+        let receiver_address = receiver_transport.local_addr().expect("receiver address");
+        sender_transport.set_remote(receiver_address);
+        sender_transport
+            .send(b"malformed")
+            .expect("malformed datagram sends");
+
+        let session = SessionId::new(3).expect("session ID");
+        let sender = PlainTunnel::new(sender_device, sender_transport, session);
+        let mut receiver = PlainTunnel::new(receiver_device, receiver_transport, session);
+        receiver
+            .transport
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .expect("timeout configures");
+        assert!(matches!(
+            receiver.receive_next(),
+            Err(TunnelError::Protocol(
+                crate::ProtocolError::PacketTooShort { .. }
+            ))
+        ));
+
+        let mut sender = sender;
+        sender.send_next().expect("valid datagram sends");
+        assert_eq!(receiver.receive_next(), Ok(12));
+    }
 }
