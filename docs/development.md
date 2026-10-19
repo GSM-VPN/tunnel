@@ -113,7 +113,9 @@ tests assert the record shape and the established-state value.
 `DnsUpstreamSelector` preserves the validated upstream order for a resolver
 adapter. A failed query advances to the next provider and wraps around after
 the last one; a successful query keeps the current provider selected. The
-selector stores no query names, response bodies, or user-specific history.
+selector exposes bounded per-upstream success/failure counters and measured
+latency totals, but stores no query names, response bodies, or user-specific
+history.
 The current Core has no DNS response cache, so it cannot retain an arbitrary or
 indefinite result for censorship-avoidance purposes. It exposes only the
 validated policy cursor; any future TTL cache must add bounded expiry and a

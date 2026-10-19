@@ -1,6 +1,6 @@
 //! Validated DNS policy and platform command planning.
 
-use std::net::IpAddr;
+use std::{net::IpAddr, time::Duration};
 
 const MAX_UPSTREAMS: usize = 8;
 const MAX_SEARCH_DOMAINS: usize = 8;
@@ -20,6 +20,14 @@ pub struct DnsUpstream {
     pub address: IpAddr,
     pub port: u16,
     pub transport: DnsTransport,
+}
+
+/// Secret-free counters for one configured upstream.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct DnsUpstreamMetrics {
+    pub successes: u64,
+    pub failures: u64,
+    pub total_latency: Duration,
 }
 
 /// Resolver policy applied while the tunnel is active.
@@ -44,6 +52,7 @@ pub struct DnsSnapshot {
 pub struct DnsUpstreamSelector {
     upstreams: Vec<DnsUpstream>,
     current: usize,
+    metrics: Vec<DnsUpstreamMetrics>,
 }
 
 /// One argv-safe command emitted by the privileged DNS adapter.
@@ -99,6 +108,7 @@ impl DnsUpstreamSelector {
         Self {
             upstreams: policy.upstreams.clone(),
             current: 0,
+            metrics: vec![DnsUpstreamMetrics::default(); policy.upstreams.len()],
         }
     }
 
@@ -108,12 +118,36 @@ impl DnsUpstreamSelector {
         &self.upstreams[self.current]
     }
 
-    /// Keeps the successful provider selected.
-    pub fn record_success(&mut self) {}
+    /// Keeps the successful provider selected and records a zero-latency
+    /// success for callers that do not measure query duration.
+    pub fn record_success(&mut self) {
+        self.record_success_with_latency(Duration::ZERO);
+    }
+
+    /// Records a measured success without retaining query data.
+    pub fn record_success_with_latency(&mut self, latency: Duration) {
+        let metrics = &mut self.metrics[self.current];
+        metrics.successes = metrics.successes.saturating_add(1);
+        metrics.total_latency = metrics.total_latency.saturating_add(latency);
+    }
 
     /// Advances to the next provider after a resolver failure.
     pub fn record_failure(&mut self) {
+        self.record_failure_with_latency(Duration::ZERO);
+    }
+
+    /// Records a measured failure and advances to the next provider.
+    pub fn record_failure_with_latency(&mut self, latency: Duration) {
+        let metrics = &mut self.metrics[self.current];
+        metrics.failures = metrics.failures.saturating_add(1);
+        metrics.total_latency = metrics.total_latency.saturating_add(latency);
         self.current = (self.current + 1) % self.upstreams.len();
+    }
+
+    /// Returns provider metrics in the same order as the configured upstreams.
+    #[must_use]
+    pub fn metrics(&self) -> &[DnsUpstreamMetrics] {
+        &self.metrics
     }
 }
 
@@ -278,6 +312,7 @@ mod tests {
         DnsPolicy, DnsSnapshot, DnsTransport, DnsUpstream, DnsUpstreamSelector, LinuxDnsPlan,
     };
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+    use std::time::Duration;
 
     fn upstream(address: IpAddr) -> DnsUpstream {
         DnsUpstream {
@@ -371,6 +406,32 @@ mod tests {
         assert_eq!(
             selector.current().address,
             "1.1.1.1".parse::<IpAddr>().unwrap()
+        );
+    }
+
+    #[test]
+    fn records_bounded_upstream_outcomes_without_query_data() {
+        let policy = DnsPolicy::new(
+            vec![
+                upstream("1.1.1.1".parse().unwrap()),
+                upstream("9.9.9.9".parse().unwrap()),
+            ],
+            vec![],
+        )
+        .unwrap();
+        let mut selector = DnsUpstreamSelector::from_policy(&policy);
+        selector.record_failure_with_latency(Duration::from_millis(12));
+        selector.record_success_with_latency(Duration::from_millis(7));
+        assert_eq!(selector.metrics()[0].failures, 1);
+        assert_eq!(selector.metrics()[0].successes, 0);
+        assert_eq!(
+            selector.metrics()[0].total_latency,
+            Duration::from_millis(12)
+        );
+        assert_eq!(selector.metrics()[1].successes, 1);
+        assert_eq!(
+            selector.metrics()[1].total_latency,
+            Duration::from_millis(7)
         );
     }
 
