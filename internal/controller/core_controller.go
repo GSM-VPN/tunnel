@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"sync"
+
+	"github.com/GSM-VPN/tunnel/internal/protocol"
 )
 
 var (
@@ -34,16 +36,18 @@ type coreStarter func(context.Context, CoreCommand) (CoreProcess, error)
 // CoreController connects the Core process, bounded supervisor, and exposed
 // lifecycle state into one controller-owned boundary.
 type CoreController struct {
-	mu         sync.Mutex
-	config     CoreCommand
-	supervisor Supervisor
-	start      coreStarter
-	state      CoreState
-	startCount uint32
-	lastError  error
-	cancel     context.CancelFunc
-	done       chan struct{}
-	result     error
+	mu          sync.Mutex
+	config      CoreCommand
+	supervisor  Supervisor
+	start       coreStarter
+	synchronize func(context.Context, CoreDesiredState) error
+	desired     CoreDesiredState
+	state       CoreState
+	startCount  uint32
+	lastError   error
+	cancel      context.CancelFunc
+	done        chan struct{}
+	result      error
 }
 
 // NewCoreController creates a controller that launches the configured Rust
@@ -52,9 +56,13 @@ func NewCoreController(config CoreCommand, policy RestartPolicy) *CoreController
 	if policy.MaxAttempts == 0 {
 		policy = DefaultRestartPolicy()
 	}
-	return newCoreController(config, policy, func(ctx context.Context, config CoreCommand) (CoreProcess, error) {
+	controller := newCoreController(config, policy, func(ctx context.Context, config CoreCommand) (CoreProcess, error) {
 		return StartCore(ctx, config)
 	})
+	controller.synchronize = func(ctx context.Context, desired CoreDesiredState) error {
+		return (CoreSynchronizer{Client: Client{SocketPath: config.SocketPath}}).Synchronize(ctx, desired)
+	}
+	return controller
 }
 
 func newCoreController(config CoreCommand, policy RestartPolicy, start coreStarter) *CoreController {
@@ -62,8 +70,40 @@ func newCoreController(config CoreCommand, policy RestartPolicy, start coreStart
 		config:     config,
 		supervisor: Supervisor{Policy: policy},
 		start:      start,
+		desired:    NewCoreDesiredState(),
 		state:      CoreStopped,
 	}
+}
+
+// SetConfiguration stores network policy for initial startup and every Core
+// restart. It does not include any secret or key material.
+func (controller *CoreController) SetConfiguration(configuration protocol.NetworkConfiguration) {
+	controller.mu.Lock()
+	defer controller.mu.Unlock()
+	controller.desired.SetConfiguration(configuration)
+}
+
+// ApprovePeer stores an approved peer for initial startup and every Core
+// restart. PeerRegistration intentionally contains no private key material.
+func (controller *CoreController) ApprovePeer(peer protocol.PeerRegistration) {
+	controller.mu.Lock()
+	defer controller.mu.Unlock()
+	controller.desired.RegisterPeer(peer)
+}
+
+// RevokePeer removes a peer from the state that will be restored after a Core
+// restart.
+func (controller *CoreController) RevokePeer(peerID uint64) {
+	controller.mu.Lock()
+	defer controller.mu.Unlock()
+	controller.desired.RemovePeer(peerID)
+}
+
+// DesiredState returns an isolated, secret-free synchronization snapshot.
+func (controller *CoreController) DesiredState() CoreDesiredState {
+	controller.mu.Lock()
+	defer controller.mu.Unlock()
+	return controller.desired.Snapshot()
 }
 
 // Start begins Core supervision and returns once the monitor is installed.
@@ -146,6 +186,15 @@ func (controller *CoreController) run(ctx context.Context) {
 		process, err := controller.start(ctx, controller.config)
 		if err != nil {
 			return nil, err
+		}
+		if controller.synchronize != nil {
+			controller.mu.Lock()
+			desired := controller.desired.Snapshot()
+			controller.mu.Unlock()
+			if err := controller.synchronize(ctx, desired); err != nil {
+				_ = process.Stop()
+				return nil, err
+			}
 		}
 		controller.mu.Lock()
 		controller.startCount++
