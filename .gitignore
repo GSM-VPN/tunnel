@@ -1,1 +1,10 @@
-.codex/
+# Go
+bin/
+coverage.out
+
+# Rust
+target/
+
+# Local development
+.env
+.DS_Store

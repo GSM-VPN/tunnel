@@ -1,0 +1,13 @@
+[package]
+name = "tunnel-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Rust data-plane foundation for the GSM Tunnel engine"
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
+
