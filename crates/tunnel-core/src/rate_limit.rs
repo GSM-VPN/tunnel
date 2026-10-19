@@ -138,4 +138,18 @@ mod tests {
         assert!(limiter.allow(1, RateLimitKind::Handshake, now + Duration::from_secs(1)));
         assert_eq!(limiter.tracked_subjects(), 1);
     }
+
+    #[test]
+    fn isolates_packet_bursts_between_peers() {
+        let policy = RateLimitPolicy {
+            max_packets: 1,
+            max_subjects: 2,
+            ..RateLimitPolicy::default()
+        };
+        let mut limiter = PeerRateLimiter::new(policy);
+        let now = UNIX_EPOCH + Duration::from_secs(1);
+        assert!(limiter.allow(1, RateLimitKind::Packet, now));
+        assert!(!limiter.allow(1, RateLimitKind::Packet, now));
+        assert!(limiter.allow(2, RateLimitKind::Packet, now));
+    }
 }
