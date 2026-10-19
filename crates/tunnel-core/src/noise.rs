@@ -1,8 +1,10 @@
 //! Noise IK handshake boundary.
 
+use std::time::SystemTime;
+
 use snow::{Builder, HandshakeState, TransportState, params::NoiseParams};
 
-use crate::ServerIdentity;
+use crate::{PeerRegistry, ServerIdentity};
 
 /// Noise pattern selected by the protocol specification.
 pub const NOISE_IK_PARAMS: &str = "Noise_IK_25519_ChaChaPoly_SHA256";
@@ -88,6 +90,30 @@ impl NoiseHandshake {
         initiator_public_key: &[u8],
     ) -> Result<Self, NoiseHandshakeError> {
         Self::responder(identity.private_key(), initiator_public_key)
+    }
+
+    /// Builds a responder only when the peer key is currently approved.
+    ///
+    /// The approval check happens before allocating a Noise handshake state,
+    /// while the handshake still repeats the exact public-key check after the
+    /// peer's first message. This keeps authorization and cryptographic
+    /// authentication as separate, required gates.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NoiseHandshakeError::UnauthorizedPeer`] for an unknown,
+    /// expired, or mismatched peer approval.
+    pub fn responder_for_approved_peer(
+        identity: &ServerIdentity,
+        peers: &PeerRegistry,
+        peer_id: u64,
+        initiator_public_key: &[u8; 32],
+        now: SystemTime,
+    ) -> Result<Self, NoiseHandshakeError> {
+        if !peers.is_authorized(peer_id, initiator_public_key, now) {
+            return Err(NoiseHandshakeError::UnauthorizedPeer);
+        }
+        Self::responder_for_identity(identity, initiator_public_key)
     }
 
     #[must_use]
@@ -206,6 +232,13 @@ impl NoiseTransport {
 mod tests {
     use snow::{Builder, params::NoiseParams};
 
+    use std::{
+        net::Ipv4Addr,
+        time::{Duration, SystemTime, UNIX_EPOCH},
+    };
+
+    use crate::{PeerAuthorization, PeerRegistry};
+
     use super::{NOISE_IK_PARAMS, NoiseHandshake, NoiseHandshakeError};
 
     #[test]
@@ -233,6 +266,55 @@ mod tests {
             responder_transport.read_message(&encrypted).unwrap(),
             b"payload"
         );
+    }
+
+    #[test]
+    fn approved_peer_gate_rejects_unknown_and_expired_keys() {
+        let params: NoiseParams = NOISE_IK_PARAMS.parse().unwrap();
+        let builder = Builder::new(params);
+        let initiator_key = builder.generate_keypair().unwrap();
+        let identity = crate::ServerIdentity::from_hex(&"11".repeat(32)).unwrap();
+        let initiator_public_key: [u8; 32] = initiator_key.public.try_into().unwrap();
+        let mut peers = PeerRegistry::new(1);
+        let now = UNIX_EPOCH + Duration::from_secs(10);
+        peers
+            .register(
+                PeerAuthorization {
+                    peer_id: 7,
+                    user_id: "approved".to_string(),
+                    public_key: initiator_public_key,
+                    ipv4: Some(Ipv4Addr::new(10, 80, 0, 2)),
+                    ipv6: None,
+                    expires_at: now + Duration::from_secs(10),
+                },
+                now,
+            )
+            .unwrap();
+
+        assert!(
+            NoiseHandshake::responder_for_approved_peer(
+                &identity,
+                &peers,
+                7,
+                &initiator_public_key,
+                now,
+            )
+            .is_ok()
+        );
+        assert!(matches!(
+            NoiseHandshake::responder_for_approved_peer(&identity, &peers, 7, &[9; 32], now,),
+            Err(NoiseHandshakeError::UnauthorizedPeer)
+        ));
+        assert!(matches!(
+            NoiseHandshake::responder_for_approved_peer(
+                &identity,
+                &peers,
+                7,
+                &initiator_public_key,
+                SystemTime::now(),
+            ),
+            Err(NoiseHandshakeError::UnauthorizedPeer)
+        ));
     }
 
     #[test]
