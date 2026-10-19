@@ -44,12 +44,10 @@ impl LinuxTunDevice {
             .map_err(|error| DeviceError::Io(error.kind()))?;
 
         let requested_name = requested_name.unwrap_or("gsm0");
+        validate_interface_name(requested_name)?;
         let name = CString::new(requested_name)
             .map_err(|_| DeviceError::Io(std::io::ErrorKind::InvalidInput))?;
         let bytes = name.as_bytes_with_nul();
-        if bytes.len() > IFNAMSIZ {
-            return Err(DeviceError::Io(std::io::ErrorKind::InvalidInput));
-        }
 
         let mut request = IfReq {
             name: [0; IFNAMSIZ],
@@ -89,6 +87,19 @@ impl LinuxTunDevice {
     }
 }
 
+fn validate_interface_name(name: &str) -> Result<(), DeviceError> {
+    if name.is_empty() || name.as_bytes().contains(&0) || name.len() >= IFNAMSIZ {
+        return Err(DeviceError::Io(std::io::ErrorKind::InvalidInput));
+    }
+    Ok(())
+}
+
+impl Drop for LinuxTunDevice {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
 impl TunnelDevice for LinuxTunDevice {
     fn mtu(&self) -> usize {
         self.mtu
@@ -115,5 +126,28 @@ impl TunnelDevice for LinuxTunDevice {
     fn close(&mut self) -> Result<(), DeviceError> {
         self.file.take();
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_interface_name;
+    use crate::DeviceError;
+
+    #[test]
+    fn validates_linux_interface_name_before_ioctl() {
+        assert!(matches!(
+            validate_interface_name(""),
+            Err(DeviceError::Io(std::io::ErrorKind::InvalidInput))
+        ));
+        assert!(matches!(
+            validate_interface_name("bad\0name"),
+            Err(DeviceError::Io(std::io::ErrorKind::InvalidInput))
+        ));
+        assert!(matches!(
+            validate_interface_name("1234567890123456"),
+            Err(DeviceError::Io(std::io::ErrorKind::InvalidInput))
+        ));
+        assert!(validate_interface_name("gsm0").is_ok());
     }
 }
