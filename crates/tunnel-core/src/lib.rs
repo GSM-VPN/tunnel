@@ -14,6 +14,7 @@ mod linux_device;
 
 mod key_rotation;
 mod management;
+mod metrics;
 
 pub use codec::{TunnelHeader, TunnelPacket};
 pub use crypto::{CryptoError, ReplayWindow, SessionCipher};
@@ -30,6 +31,7 @@ pub use management::{
     OPERATION_REGISTER_PEER, OPERATION_REMOVE_PEER, OPERATION_START, OPERATION_STOP,
     OPERATION_TERMINATE_SESSION, OPERATION_UPDATE_CONFIGURATION,
 };
+pub use metrics::{Metrics, MetricsSnapshot};
 pub use protocol::{
     AEAD_TAG_SIZE, KeyGeneration, MAX_ENCRYPTED_PAYLOAD_SIZE, MAX_PACKET_SIZE, MAX_PAYLOAD_SIZE,
     PROTOCOL_NAME, PROTOCOL_VERSION, PacketType, ProtocolError, ProtocolVersion, SequenceNumber,
