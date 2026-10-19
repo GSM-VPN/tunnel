@@ -32,7 +32,8 @@ pub use management::{
     OPERATION_CREATE_SESSION, OPERATION_GET_HEALTH, OPERATION_GET_SESSION,
     OPERATION_GET_STATISTICS, OPERATION_INITIALIZE, OPERATION_LIST_SESSIONS,
     OPERATION_REGISTER_PEER, OPERATION_REMOVE_PEER, OPERATION_START, OPERATION_STOP,
-    OPERATION_TERMINATE_SESSION, OPERATION_UPDATE_CONFIGURATION,
+    OPERATION_TERMINATE_SESSION, OPERATION_UPDATE_CONFIGURATION, PeerRegistrationPayload,
+    decode_peer_registration, decode_peer_removal, encode_peer_registration, encode_peer_removal,
 };
 pub use metrics::{Metrics, MetricsSnapshot};
 pub use noise::{NOISE_IK_PARAMS, NoiseHandshake, NoiseHandshakeError, NoiseTransport};
