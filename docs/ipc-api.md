@@ -60,6 +60,11 @@ statistics, and session reads available while returning `403` for engine,
 peer, session mutation, and configuration operations. The default policy
 allows the Go Controller's local mutating control plane.
 
+The library enforces the socket mode and peer-UID boundary, but does not
+create or switch to a dedicated operating-system service account. Deployment
+units must assign ownership to the intended service user and keep the socket
+path outside any externally writable directory.
+
 The Go Controller's `CoreDesiredState` stores only approved peer data and
 network policy. `CoreSynchronizer` restores that state after every Core
 restart in the order `Initialize`, `UpdateConfiguration`, `RegisterPeer`, and
