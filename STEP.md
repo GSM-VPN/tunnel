@@ -181,8 +181,8 @@ Tunnel Handshake / Encrypted Session
 #### DNS Resolver
 
 - [x] VPN 서버에 자체 캐시 Resolver를 둘 수 있도록 설계
-- [ ] Resolver는 여러 외부 Upstream DNS Provider를 지원
-- [ ] Upstream 장애 시 다음 Provider로 자동 전환
+- [x] Resolver는 여러 외부 Upstream DNS Provider를 지원
+- [x] Upstream 장애 시 다음 Provider로 자동 전환
 - [ ] 가능하면 DoT 또는 DoH로 Upstream에 연결
 - [ ] DNS 응답은 표준 TTL 범위 안에서 캐시
 - [ ] 검열 회피를 목적으로 무기한 또는 임의의 DNS 결과를 저장하지 않음

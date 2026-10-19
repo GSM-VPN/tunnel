@@ -95,6 +95,11 @@ it does not include keys, packet contents, or user profile data. The Controller
 can therefore render per-peer connection state without transporting the data
 plane through Go.
 
+`DnsUpstreamSelector` preserves the validated upstream order for a resolver
+adapter. A failed query advances to the next provider and wraps around after
+the last one; a successful query keeps the current provider selected. The
+selector stores no query names, response bodies, or user-specific history.
+
 Secret configuration follows a separate boundary: `GATEWAY_SHARED_SECRET` is
 kept by the Gateway/VPN service-authentication layer, while
 `SERVER_PRIVATE_KEY` is supplied to Rust Core through its environment and is
