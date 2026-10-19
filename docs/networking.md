@@ -40,3 +40,8 @@ default route (and the IPv6 default route for dual-stack policy) through the
 TUN interface. Its cleanup plan removes only the routes it introduced. The
 privileged caller still owns route snapshots, restoration of pre-existing
 routes, and recovery after an interrupted process.
+
+`LinuxClientNetworkPlan` adds validated IPv4/IPv6 addresses for the TUN
+interface and emits address setup before routing, followed by reverse cleanup.
+It is still a command planner; applying the commands and restoring a route
+snapshot belong to the privileged platform adapter.
