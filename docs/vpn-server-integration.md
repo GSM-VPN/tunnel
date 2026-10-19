@@ -48,6 +48,12 @@ CoreController desired state
 constant-time 비교한다. secret 자체는 로그, 상태 snapshot, Peer payload,
 IPC payload에 복사하지 않는다. 서명 실패는 승인 정보 검증 전에 반환한다.
 
+`GATEWAY_SHARED_SECRET`의 공급은 기존 Gateway/VPN Server 서비스 인증 설정이
+담당하며, Controller는 초기화 시 전달받은 값으로 검증기만 구성한다. 반면
+`SERVER_PRIVATE_KEY`는 Rust Core 프로세스의 `SERVER_PRIVATE_KEY` 환경 변수로
+공급되어 Core identity 경계에서만 파싱된다. 두 값 모두 설정 파일, IPC,
+상태 조회, 메트릭으로 우회 공급하지 않는다.
+
 ## 현재 범위와 후속 연동
 
 이 문서는 서비스 인증을 Tunnel Core에 재구현하지 않는다. Gateway 로그인,
