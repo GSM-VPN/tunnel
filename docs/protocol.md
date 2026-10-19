@@ -27,3 +27,10 @@ handshake implementation yet.
 
 Unknown versions, packet types, invalid session IDs, non-zero reserved fields,
 oversized packets, and length mismatches are rejected.
+
+The authenticated data path validates an inner packet before encryption and
+again after decryption, before writing it to the tunnel device. The validator
+requires an exact IPv4/IPv6 total length, checks IPv4 header checksums, applies
+the encrypted payload MTU budget, and rejects IPv6 when dual-stack mode is
+disabled. Invalid inner packets are discarded without allocating a sequence
+number or writing plaintext to a device.

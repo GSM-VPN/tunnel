@@ -1,3 +1,5 @@
+use crate::protocol::HEADER_SIZE;
+use crate::{AEAD_TAG_SIZE, InnerIpPacketError, validate_inner_ip_packet};
 use crate::{
     DeviceError, MAX_PACKET_SIZE, PROTOCOL_VERSION, PacketType, ProtocolError, SequenceNumber,
     SessionCipher, SessionId, TransportError, TunnelDevice, TunnelHeader, TunnelPacket,
@@ -13,6 +15,7 @@ pub enum EncryptedTunnelError {
     Protocol(ProtocolError),
     Crypto(crate::CryptoError),
     Transport(TransportError),
+    InvalidInnerPacket(InnerIpPacketError),
     UnexpectedPacketType(PacketType),
     KeyRotationRequired(RotationReason),
     SequenceExhausted,
@@ -42,6 +45,12 @@ impl From<TransportError> for EncryptedTunnelError {
     }
 }
 
+impl From<InnerIpPacketError> for EncryptedTunnelError {
+    fn from(error: InnerIpPacketError) -> Self {
+        Self::InvalidInnerPacket(error)
+    }
+}
+
 /// Authenticated tunnel data path.
 pub struct EncryptedTunnel<D> {
     pub(crate) device: D,
@@ -53,6 +62,8 @@ pub struct EncryptedTunnel<D> {
     transmitted_bytes: u64,
     started_at: Instant,
     rotation_policy: KeyRotationPolicy,
+    inner_packet_mtu: usize,
+    dual_stack: bool,
 }
 
 impl<D: TunnelDevice> EncryptedTunnel<D> {
@@ -83,6 +94,7 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
         session_id: SessionId,
         rotation_policy: KeyRotationPolicy,
     ) -> Self {
+        let inner_packet_mtu = device.mtu().saturating_sub(HEADER_SIZE + AEAD_TAG_SIZE);
         Self {
             device,
             transport,
@@ -93,7 +105,17 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
             transmitted_bytes: 0,
             started_at: Instant::now(),
             rotation_policy,
+            inner_packet_mtu,
+            dual_stack: true,
         }
+    }
+
+    /// Restricts inner packets to an explicit MTU and address-family policy.
+    #[must_use]
+    pub fn with_inner_packet_policy(mut self, mtu: usize, dual_stack: bool) -> Self {
+        self.inner_packet_mtu = mtu;
+        self.dual_stack = dual_stack;
+        self
     }
 
     #[must_use]
@@ -157,6 +179,7 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
         let mut payload = vec![0; self.device.mtu()];
         let length = self.device.read_packet(&mut payload)?;
         payload.truncate(length);
+        validate_inner_ip_packet(&payload, self.inner_packet_mtu, self.dual_stack)?;
         let next_sequence = self
             .next_sequence
             .checked_add(1)
@@ -218,7 +241,10 @@ impl<D: TunnelDevice> EncryptedTunnel<D> {
         let packet = TunnelPacket::decode(&encoded[..length])?;
         let plaintext = self.receiver.open(&packet)?;
         match packet.header.packet_type {
-            PacketType::TransportData => Ok(self.device.write_packet(&plaintext)?),
+            PacketType::TransportData => {
+                validate_inner_ip_packet(&plaintext, self.inner_packet_mtu, self.dual_stack)?;
+                Ok(self.device.write_packet(&plaintext)?)
+            }
             PacketType::Keepalive => Ok(0),
             packet_type => Err(EncryptedTunnelError::UnexpectedPacketType(packet_type)),
         }
@@ -230,12 +256,27 @@ mod tests {
     use super::EncryptedTunnel;
     use crate::{
         DeviceError, KeyGeneration, KeyRotationPolicy, MemoryDevice, RotationReason, SessionCipher,
-        SessionId, TunnelDevice, UdpTransport,
+        SessionId, TunnelDevice, UdpTransport, ipv4_header_checksum,
     };
     use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
     fn loopback() -> SocketAddr {
         SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0)
+    }
+
+    fn ipv4_packet(payload: &[u8]) -> Vec<u8> {
+        let mut packet = vec![0; 20 + payload.len()];
+        packet[0] = 0x45;
+        let length = u16::try_from(packet.len()).expect("test packet fits IPv4 length");
+        packet[2..4].copy_from_slice(&length.to_be_bytes());
+        packet[8] = 64;
+        packet[9] = 17;
+        packet[12..16].copy_from_slice(&[10, 80, 0, 2]);
+        packet[16..20].copy_from_slice(&[1, 1, 1, 1]);
+        packet[20..].copy_from_slice(payload);
+        let checksum = ipv4_header_checksum(&packet[..20]);
+        packet[10..12].copy_from_slice(&checksum.to_be_bytes());
+        packet
     }
 
     #[test]
@@ -245,9 +286,8 @@ mod tests {
         let (mut client_device, server_device) = MemoryDevice::pair(1_400);
         let mut server_application = server_device.clone();
         let mut client_application = client_device.clone();
-        client_device
-            .inject(b"encrypted packet")
-            .expect("packet injects");
+        let packet = ipv4_packet(b"encrypted packet");
+        client_device.inject(&packet).expect("packet injects");
         let client_transport = UdpTransport::bind(loopback(), 1_400).expect("client binds");
         let server_transport = UdpTransport::bind(loopback(), 1_400).expect("server binds");
         let client_address = client_transport.local_addr().expect("client address");
@@ -273,8 +313,8 @@ mod tests {
         client.send_next().expect("packet sends");
         server.receive_next().expect("packet receives");
         let mut output = [0; 1_400];
-        assert_eq!(client_application.read_packet(&mut output), Ok(16));
-        assert_eq!(&output[..16], b"encrypted packet");
+        assert_eq!(client_application.read_packet(&mut output), Ok(36));
+        assert_eq!(&output[..36], packet);
         client.send_keepalive().expect("keepalive sends");
         assert_eq!(server.receive_next(), Ok(0));
         assert_eq!(
@@ -284,17 +324,41 @@ mod tests {
     }
 
     #[test]
+    fn rejects_non_ip_payload_before_encryption() {
+        let session = SessionId::new(9).expect("session ID");
+        let (mut device, _) = MemoryDevice::pair(1_400);
+        device.inject(b"not an IP packet").expect("packet injects");
+        let client_transport = UdpTransport::bind(loopback(), 1_400).expect("client binds");
+        let server_transport = UdpTransport::bind(loopback(), 1_400).expect("server binds");
+        let mut tunnel = EncryptedTunnel::new(
+            device,
+            client_transport,
+            SessionCipher::new([7; 32], session, KeyGeneration(0), 1),
+            SessionCipher::new([8; 32], session, KeyGeneration(0), 2),
+            session,
+        );
+        tunnel
+            .transport
+            .set_remote(server_transport.local_addr().expect("server address"));
+        assert!(matches!(
+            tunnel.send_next(),
+            Err(super::EncryptedTunnelError::InvalidInnerPacket(_))
+        ));
+    }
+
+    #[test]
     fn stops_sending_before_key_rotation_byte_limit() {
         let key = [4; 32];
         let session = SessionId::new(12).expect("session ID");
         let (mut device, _) = MemoryDevice::pair(1_400);
-        device.inject(b"first").expect("packet injects");
+        let packet = ipv4_packet(b"first");
+        device.inject(&packet).expect("packet injects");
         let client_transport = UdpTransport::bind(loopback(), 1_400).expect("client binds");
         let server_transport = UdpTransport::bind(loopback(), 1_400).expect("server binds");
         let server_address = server_transport.local_addr().expect("server address");
         let policy = KeyRotationPolicy {
             max_age: std::time::Duration::from_secs(3_600),
-            max_bytes: 5,
+            max_bytes: 25,
             max_sequence: u64::MAX - 1,
         };
         let mut tunnel = EncryptedTunnel::with_rotation_policy(
@@ -307,7 +371,7 @@ mod tests {
         );
         tunnel.transport.set_remote(server_address);
         tunnel.send_next().expect("first packet sends");
-        assert_eq!(tunnel.transmitted_bytes(), 5);
+        assert_eq!(tunnel.transmitted_bytes(), 25);
         assert_eq!(
             tunnel.send_next(),
             Err(super::EncryptedTunnelError::KeyRotationRequired(
