@@ -34,6 +34,17 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     );
     socket.send_to(&encoded, server)?;
     println!("client sent_bytes={}", encoded.len());
+    socket.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
+    let mut response_buffer = [0; 1_400];
+    let (response_length, response_peer) = socket.recv_from(&mut response_buffer)?;
+    if response_peer != server {
+        return Err(format!("unexpected response peer: {response_peer}").into());
+    }
+    let response = TunnelPacket::decode(&response_buffer[..response_length])?;
+    if response.header != packet.header || response.payload != packet.payload {
+        return Err("echo response did not match the request".into());
+    }
+    println!("client received_bytes={response_length} peer={response_peer}");
     println!("client stopped");
     Ok(())
 }

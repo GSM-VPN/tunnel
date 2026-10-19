@@ -11,5 +11,8 @@ cargo run -p tunnel-core --example server -- --listen 127.0.0.1:51820
 cargo run -p tunnel-core --example client -- --server 127.0.0.1:51820 --message hello
 ```
 
-It validates the fixed packet encoder/decoder and UDP transport only. It is
-not encrypted and must not be used as a VPN or on an untrusted network.
+The client waits for the server's validated echo, so the command verifies the
+client-to-server and server-to-client UDP directions. A timeout or mismatched
+echo exits with an error. It validates the fixed packet encoder/decoder and UDP
+transport only. It is not encrypted and must not be used as a VPN or on an
+untrusted network.
