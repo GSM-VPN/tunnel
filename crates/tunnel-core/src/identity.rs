@@ -2,6 +2,7 @@
 
 use std::{env, fmt};
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::Zeroizing;
 
@@ -28,7 +29,7 @@ impl fmt::Debug for ServerIdentity {
         formatter
             .debug_struct("ServerIdentity")
             .field("private_key", &"[redacted]")
-            .field("public_key", &hex_encode(self.public_key.as_bytes()))
+            .field("public_key", &self.public_key_base64())
             .finish()
     }
 }
@@ -54,33 +55,38 @@ impl ServerIdentity {
         })
     }
 
-    /// Loads `SERVER_PRIVATE_KEY` as exactly 32 bytes of lowercase/uppercase
-    /// hexadecimal without logging or copying the secret into a String field.
+    /// Loads `SERVER_PRIVATE_KEY` as exactly 32 bytes of standard Base64
+    /// without logging or copying the secret into a String field.
     ///
     /// # Errors
     ///
-    /// Returns an error when the variable is missing, not 64 hex characters,
-    /// or contains a non-hex character.
+    /// Returns an error when the variable is missing, not a canonical 44-byte
+    /// Base64 encoding, or does not decode to exactly 32 bytes.
     pub fn from_env() -> Result<Self, IdentityConfigError> {
         let encoded =
             env::var(SERVER_PRIVATE_KEY_ENV).map_err(|_| IdentityConfigError::MissingPrivateKey)?;
-        Self::from_hex(&encoded)
+        Self::from_base64(&encoded)
     }
 
-    /// Builds an identity from a 64-character hexadecimal private key.
+    /// Builds an identity from a canonical standard Base64 private key.
     ///
     /// # Errors
     ///
-    /// Returns an error when the encoding is not exactly 32 bytes of hex.
-    pub fn from_hex(encoded: &str) -> Result<Self, IdentityConfigError> {
-        if encoded.len() != 64 {
+    /// Returns an error when the encoding is not exactly 32 bytes of Base64.
+    pub fn from_base64(encoded: &str) -> Result<Self, IdentityConfigError> {
+        if encoded.len() != 44 || !encoded.ends_with('=') {
             return Err(IdentityConfigError::InvalidPrivateKeyLength);
         }
-        let mut private_bytes = Zeroizing::new([0; 32]);
-        for (index, byte) in private_bytes.iter_mut().enumerate() {
-            *byte = (hex_value(encoded.as_bytes()[index * 2])? << 4)
-                | hex_value(encoded.as_bytes()[index * 2 + 1])?;
+        let decoded = STANDARD
+            .decode(encoded)
+            .map_err(|_| IdentityConfigError::InvalidPrivateKeyEncoding)?;
+        if STANDARD.encode(&decoded) != encoded {
+            return Err(IdentityConfigError::InvalidPrivateKeyEncoding);
         }
+        let private_bytes: Zeroizing<[u8; 32]> = decoded
+            .try_into()
+            .map(Zeroizing::new)
+            .map_err(|_| IdentityConfigError::InvalidPrivateKeyLength)?;
         let private_secret = StaticSecret::from(*private_bytes);
         let public_key = PublicKey::from(&private_secret);
         Ok(Self {
@@ -95,44 +101,31 @@ impl ServerIdentity {
         *self.public_key.as_bytes()
     }
 
+    /// Returns the public key in the Base64 representation used by
+    /// `vpn-server` and its `WireGuard` integration.
+    #[must_use]
+    pub fn public_key_base64(&self) -> String {
+        STANDARD.encode(self.public_key.as_bytes())
+    }
+
     pub(crate) fn private_key(&self) -> &[u8; 32] {
         &self.private_key
     }
 }
 
-fn hex_value(value: u8) -> Result<u8, IdentityConfigError> {
-    match value {
-        b'0'..=b'9' => Ok(value - b'0'),
-        b'a'..=b'f' => Ok(value - b'a' + 10),
-        b'A'..=b'F' => Ok(value - b'A' + 10),
-        _ => Err(IdentityConfigError::InvalidPrivateKeyEncoding),
-    }
-}
-
-fn hex_encode(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    bytes
-        .iter()
-        .flat_map(|byte| {
-            [
-                HEX[(byte >> 4) as usize] as char,
-                HEX[(byte & 0x0f) as usize] as char,
-            ]
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+
     use super::{IdentityConfigError, ServerIdentity};
 
     #[test]
     fn derives_a_stable_public_key_without_exposing_private_material() {
-        let identity = ServerIdentity::from_hex(&"11".repeat(32)).unwrap();
+        let identity = ServerIdentity::from_base64(&STANDARD.encode([0x11; 32])).unwrap();
         assert_ne!(identity.public_key(), [0; 32]);
         let debug = format!("{identity:?}");
         assert!(debug.contains("redacted"));
-        assert!(!debug.contains(&"11".repeat(32)));
+        assert_eq!(identity.public_key_base64().len(), 44);
     }
 
     #[test]
@@ -144,14 +137,22 @@ mod tests {
     }
 
     #[test]
-    fn rejects_missing_length_and_invalid_hex() {
+    fn rejects_missing_length_non_base64_and_legacy_hex() {
         assert!(matches!(
-            ServerIdentity::from_hex("00"),
+            ServerIdentity::from_base64("AA=="),
             Err(IdentityConfigError::InvalidPrivateKeyLength)
         ));
         assert!(matches!(
-            ServerIdentity::from_hex(&format!("{}gg", "00".repeat(31))),
+            ServerIdentity::from_base64(&format!("{}==", "!".repeat(42))),
             Err(IdentityConfigError::InvalidPrivateKeyEncoding)
+        ));
+        assert!(matches!(
+            ServerIdentity::from_base64(STANDARD.encode([0; 32]).trim_end_matches('=')),
+            Err(IdentityConfigError::InvalidPrivateKeyLength)
+        ));
+        assert!(matches!(
+            ServerIdentity::from_base64(&"11".repeat(32)),
+            Err(IdentityConfigError::InvalidPrivateKeyLength)
         ));
     }
 }

@@ -273,7 +273,11 @@ mod tests {
         let params: NoiseParams = NOISE_IK_PARAMS.parse().unwrap();
         let builder = Builder::new(params);
         let initiator_key = builder.generate_keypair().unwrap();
-        let identity = crate::ServerIdentity::from_hex(&"11".repeat(32)).unwrap();
+        let identity = crate::ServerIdentity::from_base64(&base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            [0x11; 32],
+        ))
+        .unwrap();
         let initiator_public_key: [u8; 32] = initiator_key.public.try_into().unwrap();
         let mut peers = PeerRegistry::new(1);
         let now = UNIX_EPOCH + Duration::from_secs(10);
@@ -358,7 +362,11 @@ mod tests {
         let params: NoiseParams = NOISE_IK_PARAMS.parse().unwrap();
         let builder = Builder::new(params);
         let initiator_key = builder.generate_keypair().unwrap();
-        let identity = crate::ServerIdentity::from_hex(&"22".repeat(32)).unwrap();
+        let identity = crate::ServerIdentity::from_base64(&base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            [0x22; 32],
+        ))
+        .unwrap();
         let mut initiator =
             NoiseHandshake::initiator(&initiator_key.private, &identity.public_key()).unwrap();
         let mut responder =
