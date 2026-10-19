@@ -248,7 +248,7 @@ Tunnel Handshake / Encrypted Session
 - [x] 암호화 인증 실패 수 제공
 - [x] Replay 거부 수 제공
 - [ ] 재연결 횟수와 평균 복구 시간 제공
-- [ ] DNS Resolver Upstream별 성공·실패·지연시간 제공
+- [x] DNS Resolver Upstream별 성공·실패·지연시간 제공
 - [x] 로그에는 키, 평문 패킷, DNS 질의 원문을 기록하지 않음
 - [x] 승인 철회는 감사 로그로 기록하고 키 원문을 기록하지 않음
 - [ ] 키 파기·일반 권한 변경은 감사 로그로 기록
