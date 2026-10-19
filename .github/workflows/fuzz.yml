@@ -1,0 +1,33 @@
+name: Fuzz
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  go-fuzz:
+    name: Go protocol fuzzing
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Fuzz request frames
+        run: go test ./internal/protocol -run '^$' -fuzz FuzzUnmarshalRequestFrameNeverPanics -fuzztime=30s
+
+      - name: Fuzz response frames
+        run: go test ./internal/protocol -run '^$' -fuzz FuzzUnmarshalResponseFrameNeverPanics -fuzztime=30s

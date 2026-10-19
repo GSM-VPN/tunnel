@@ -427,7 +427,7 @@ Windows/Wintun
 - [x] 포맷 검사 추가
 - [x] 정적 분석 추가
 - [ ] 의존성 취약점 검사 추가
-- [ ] Fuzz 테스트 작업 분리
+- [x] Fuzz 테스트 작업 분리
 - [ ] 벤치마크 작업 분리
 - [ ] 릴리스 빌드 작업의 기본 구조 작성
 
@@ -1077,7 +1077,7 @@ DISCONNECTED
 - [x] 빈 Payload
 - [x] 알 수 없는 Session ID
 - [x] 임의 입력
-- [ ] Fuzzing
+- [x] Fuzzing
 
 ### 13.3. Cryptography Test
 
