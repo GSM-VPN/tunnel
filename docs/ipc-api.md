@@ -53,6 +53,9 @@ keepalive failures, and packet errors. The Go Controller exposes this payload
 as `protocol.MetricsSnapshot` through `Client.GetMetrics`.
 
 The Rust server applies mode `0600` to the Unix socket and bounds each
-connection's read and write operations to five seconds. Socket ownership,
-caller credentials, and operation-specific authorization must still be
-enforced by the eventual daemon wrapper before production use.
+connection's read and write operations to five seconds. On Linux it checks
+the connecting process UID with `SO_PEERCRED` against the socket owner
+before decoding a request. A read-only server policy leaves health,
+statistics, and session reads available while returning `403` for engine,
+peer, session mutation, and configuration operations. The default policy
+allows the Go Controller's local mutating control plane.
