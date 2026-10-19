@@ -23,12 +23,20 @@ general-purpose VPN before independent security review.
   than a nonce-reuse-prone saturation.
 - Management messages contain opaque payloads and no key fields.
 - IPC uses a local Unix Domain Socket rather than a network listener.
+- New identities are generated with `ServerIdentity::generate`, which fills
+  private material from the operating system's CSPRNG. Stable deployments
+  load the provisioned `SERVER_PRIVATE_KEY` instead of generating a new key at
+  every restart.
 
 ## Secrets
 
 `GATEWAY_SHARED_SECRET` is a control-plane credential and must not be used as
 a tunnel data key. `SERVER_PRIVATE_KEY` belongs at the Rust identity boundary;
 neither value belongs in logs, metrics, or management payloads.
+
+`GATEWAY_SHARED_SECRET` is used only by the Go Controller's service-plane HMAC
+verifier. It is not passed to Core, used for tunnel packet encryption, or used
+as input to Noise static-key or server-public-key derivation.
 
 `ServerIdentity` loads `SERVER_PRIVATE_KEY` as exactly 32 bytes of hex inside
 Rust Core and derives the X25519 public key deterministically. Its debug output
@@ -43,6 +51,12 @@ Session cipher keys use `zeroize`-backed storage: the previous generation is
 cleared before replacement, and the active key is cleared when the cipher is
 dropped. The long-term server private key and the temporary key-parsing buffer
 use the same storage policy.
+
+The default data-key rotation policy is one hour or 1 GiB transmitted in each
+direction, whichever is reached first. A session stops at the boundary until
+an authenticated newer generation is installed. A failed rekey transitions the
+session to `CLOSING`; it does not retry indefinitely or continue using the
+previous generation.
 
 `PeerRateLimiter` applies separate bounded fixed-window limits for handshake
 and packet admission, with a maximum number of tracked peer IDs. This keeps a
