@@ -33,3 +33,10 @@ for server interface setup, IPv4 MASQUERADE, optional IPv6 addressing, and
 cleanup. It never executes commands. Interface names are restricted to safe
 Linux device-name characters, and an endpoint inside the VPN address space is
 rejected to prevent a routing loop.
+
+`LinuxClientRoutePlan` emits the client-side route transition in a safe order:
+first an endpoint host route through the physical gateway, then the IPv4
+default route (and the IPv6 default route for dual-stack policy) through the
+TUN interface. Its cleanup plan removes only the routes it introduced. The
+privileged caller still owns route snapshots, restoration of pre-existing
+routes, and recovery after an interrupted process.
