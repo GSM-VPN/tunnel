@@ -10,6 +10,7 @@ mod engine;
 mod protocol;
 mod rate_limit;
 mod session;
+mod session_endpoint;
 mod session_table;
 mod transport;
 
@@ -75,5 +76,6 @@ pub use session::{
     IdleAction, LifecycleState, SessionError, SessionEvent, SessionMachine, SessionPolicy,
     Transition,
 };
+pub use session_endpoint::{SessionEndpointError, SessionEndpointTable};
 pub use session_table::{SessionTable, SessionTableError};
 pub use transport::{TransportError, UdpTransport};

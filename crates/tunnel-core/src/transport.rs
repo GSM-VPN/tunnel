@@ -52,6 +52,12 @@ impl UdpTransport {
         self.remote = Some(remote);
     }
 
+    /// Reports whether `close` has already been called.
+    #[must_use]
+    pub fn is_closed(&self) -> bool {
+        self.socket.is_none()
+    }
+
     /// Configures the receive timeout.
     ///
     /// # Errors
@@ -171,7 +177,9 @@ mod tests {
     #[test]
     fn rejects_operations_after_close() {
         let mut transport = UdpTransport::bind(loopback(), 1_400).expect("socket binds");
+        assert!(!transport.is_closed());
         transport.close();
+        assert!(transport.is_closed());
         assert_eq!(transport.send(b"hello"), Err(TransportError::Closed));
         let mut buffer = [0; 1_400];
         assert_eq!(transport.receive(&mut buffer), Err(TransportError::Closed));
