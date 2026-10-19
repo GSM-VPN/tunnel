@@ -13,6 +13,7 @@ var (
 	ErrCoreAlreadyStarted     = errors.New("tunnel core controller is already started")
 	ErrCoreNotStarted         = errors.New("tunnel core controller is not started")
 	ErrCoreMetricsUnavailable = errors.New("core metrics are unavailable")
+	ErrCoreRequestIDExhausted = errors.New("core IPC request ID is exhausted")
 )
 
 // CoreState is the controller-owned lifecycle state of the Rust Core child.
@@ -105,6 +106,50 @@ func (controller *CoreController) RevokePeer(peerID uint64) {
 	controller.mu.Lock()
 	defer controller.mu.Unlock()
 	controller.desired.RemovePeer(peerID)
+}
+
+// ApplyPeerApproval records an approval and applies it immediately when Core
+// is running. The approval remains in desired state if the live IPC call
+// fails, so a later Core restart can retry the synchronization.
+func (controller *CoreController) ApplyPeerApproval(ctx context.Context, peer protocol.PeerRegistration, requestID uint64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	controller.ApprovePeer(peer)
+	controller.mu.Lock()
+	state := controller.state
+	socketPath := controller.config.SocketPath
+	controller.mu.Unlock()
+	if state != CoreRunning {
+		return nil
+	}
+	if requestID == ^uint64(0) {
+		return ErrCoreRequestIDExhausted
+	}
+	if _, err := (Client{SocketPath: socketPath}).RegisterPeer(requestID, peer); err != nil {
+		return fmt.Errorf("register approved peer in Core: %w", err)
+	}
+	return nil
+}
+
+// RevokePeerApproval removes an approval and asks Core to revoke it when the
+// process is running. Rust Core also closes sessions owned by that peer.
+func (controller *CoreController) RevokePeerApproval(ctx context.Context, peerID, requestID uint64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	controller.RevokePeer(peerID)
+	controller.mu.Lock()
+	state := controller.state
+	socketPath := controller.config.SocketPath
+	controller.mu.Unlock()
+	if state != CoreRunning {
+		return nil
+	}
+	if _, err := (Client{SocketPath: socketPath}).RemovePeer(requestID, peerID); err != nil {
+		return fmt.Errorf("revoke peer in Core: %w", err)
+	}
+	return nil
 }
 
 // DesiredState returns an isolated, secret-free synchronization snapshot.
