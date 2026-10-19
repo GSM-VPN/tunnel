@@ -59,7 +59,9 @@ Before applying a tunnel policy, capture the current resolver addresses and
 domains in `DnsSnapshot`. `LinuxDnsPlan::restore_commands` first reverts the
 link and then restores the captured values, followed by a cache flush. The
 Rust library only returns argv-safe command records; it never changes the
-host resolver itself.
+host resolver itself. This restore plan is the required disconnect path, and
+the unit test asserts that the captured upstreams and search domains are
+restored after the link revert.
 
 When a UDP transport has a pinned remote endpoint, received datagrams are
 checked against the sender address before protocol decoding. A server may
