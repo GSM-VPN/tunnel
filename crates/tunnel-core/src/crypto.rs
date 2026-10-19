@@ -4,12 +4,11 @@ use chacha20poly1305::{
 };
 use sha2::{Digest, Sha256};
 
-use crate::protocol::HEADER_SIZE;
+use crate::protocol::{AEAD_TAG_SIZE, HEADER_SIZE};
 use crate::{
     KeyGeneration, MAX_PAYLOAD_SIZE, ProtocolError, SessionId, TunnelHeader, TunnelPacket,
 };
 
-const TAG_SIZE: usize = 16;
 const REPLAY_WINDOW_SIZE: u64 = 2_048;
 const REPLAY_WORDS: usize = 32;
 
@@ -158,12 +157,12 @@ impl SessionCipher {
         mut header: TunnelHeader,
         plaintext: &[u8],
     ) -> Result<TunnelPacket, CryptoError> {
-        if plaintext.len() + TAG_SIZE > MAX_PAYLOAD_SIZE {
+        if plaintext.len() + AEAD_TAG_SIZE > MAX_PAYLOAD_SIZE {
             return Err(CryptoError::PayloadTooLarge);
         }
         header.session_id = self.session_id;
         header.key_generation = self.key_generation;
-        let placeholder = TunnelPacket::new(header, vec![0; plaintext.len() + TAG_SIZE])?;
+        let placeholder = TunnelPacket::new(header, vec![0; plaintext.len() + AEAD_TAG_SIZE])?;
         let encoded = placeholder.encode()?;
         let ciphertext = self
             .cipher()
@@ -192,7 +191,8 @@ impl SessionCipher {
         if packet.header.key_generation != self.key_generation {
             return Err(CryptoError::InvalidKeyGeneration);
         }
-        if packet.payload.len() < TAG_SIZE || !self.replay.accepts(packet.header.sequence_number.0)
+        if packet.payload.len() < AEAD_TAG_SIZE
+            || !self.replay.accepts(packet.header.sequence_number.0)
         {
             return Err(CryptoError::Replay);
         }
@@ -229,7 +229,10 @@ impl SessionCipher {
 #[cfg(test)]
 mod tests {
     use super::{CryptoError, ReplayWindow, SessionCipher};
-    use crate::{KeyGeneration, PacketType, ProtocolVersion, SessionId, TunnelHeader};
+    use crate::{
+        KeyGeneration, MAX_ENCRYPTED_PAYLOAD_SIZE, PacketType, ProtocolVersion, SessionId,
+        TunnelHeader,
+    };
 
     fn header(sequence: u64) -> TunnelHeader {
         TunnelHeader {
@@ -291,5 +294,19 @@ mod tests {
         assert_eq!(window.accept(9), Err(CryptoError::Replay));
         assert!(window.accept(2_100).is_ok());
         assert_eq!(window.accept(10), Err(CryptoError::Replay));
+    }
+
+    #[test]
+    fn enforces_plaintext_budget_after_aead_tag() {
+        let key = [7; 32];
+        let session = SessionId::new(7).expect("session ID");
+        let sender = SessionCipher::new(key, session, KeyGeneration(2), 1);
+        let maximum = vec![0; MAX_ENCRYPTED_PAYLOAD_SIZE];
+        assert!(sender.seal(header(1), &maximum).is_ok());
+        let oversized = vec![0; MAX_ENCRYPTED_PAYLOAD_SIZE + 1];
+        assert_eq!(
+            sender.seal(header(2), &oversized),
+            Err(CryptoError::PayloadTooLarge)
+        );
     }
 }
