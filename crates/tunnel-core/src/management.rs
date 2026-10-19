@@ -359,13 +359,14 @@ fn decode_configuration(payload: &[u8]) -> Result<TunnelNetworkConfig, ()> {
     let mtu = u16::from_be_bytes(payload[4..6].try_into().map_err(|_| ())?);
     let dual_stack = payload[6] != 0;
     let kill_switch = payload[7] != 0;
-    if ipv4_prefix != 16 || ipv6_prefix != 64 || payload[8..10] != [0, 0] {
+    if ipv4_prefix != 16 || ipv6_prefix != 64 || payload[9] != 0 {
         return Err(());
     }
     Ok(TunnelNetworkConfig {
         udp_port,
         mtu: usize::from(mtu),
         dual_stack,
+        nat66: payload[8] != 0,
         kill_switch,
         ..TunnelNetworkConfig::default()
     })

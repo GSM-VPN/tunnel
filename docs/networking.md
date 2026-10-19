@@ -50,3 +50,8 @@ snapshot belong to the privileged platform adapter.
 `10.80.0.2` and `fd80:1234:5678::2`, skips the server and network/broadcast
 addresses, and releases both families as one unit. Capacity exhaustion is
 reported before a partial pair can escape to the caller.
+
+The management configuration reserves payload byte 8 for the explicit NAT66
+policy. When enabled with dual-stack mode, `LinuxNetworkPlan` emits an IPv6
+MASQUERADE rule; the default remains disabled so routed IPv6 can be selected
+without silently applying NAT.

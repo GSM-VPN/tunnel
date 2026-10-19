@@ -114,6 +114,7 @@ type NetworkConfiguration struct {
 	UDPPort    uint16
 	MTU        uint16
 	DualStack  bool
+	Nat66      bool
 	KillSwitch bool
 }
 
@@ -128,6 +129,9 @@ func (configuration NetworkConfiguration) MarshalBinary() []byte {
 	}
 	if configuration.KillSwitch {
 		payload[7] = 1
+	}
+	if configuration.Nat66 {
+		payload[8] = 1
 	}
 	return payload
 }

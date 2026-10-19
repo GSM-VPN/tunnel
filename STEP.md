@@ -141,7 +141,7 @@ Tunnel Handshake / Encrypted Session
 - [x] IPv6 내부 대역: `fd80:1234:5678::/64`
 - [x] IPv6 서버 주소: `fd80:1234:5678::1`
 - [x] IPv6 클라이언트 주소: `fd80:1234:5678::2`부터 동적 할당
-- [ ] IPv6 외부 연결: 서버에 라우팅 가능한 Prefix가 있으면 라우팅하고, 없으면 명시된 NAT66 정책 적용
+- [x] IPv6 외부 연결: 서버에 라우팅 가능한 Prefix가 있으면 라우팅하고, 없으면 명시된 NAT66 정책 적용
 - [ ] VPN 서버 Endpoint: 물리 인터페이스 예외 경로 유지
 - [ ] NAT: Linux nftables MASQUERADE
 - [ ] IPv6: 초기 버전부터 듀얼스택 터널링 지원

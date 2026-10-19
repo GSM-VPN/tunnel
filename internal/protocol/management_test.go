@@ -100,6 +100,13 @@ func TestNetworkConfigurationPayloadUsesStableLayout(t *testing.T) {
 	}
 }
 
+func TestNetworkConfigurationPayloadCarriesNat66Policy(t *testing.T) {
+	payload := (NetworkConfiguration{UDPPort: 51820, MTU: 1400, DualStack: true, Nat66: true}).MarshalBinary()
+	if payload[8] != 1 || payload[9] != 0 {
+		t.Fatalf("unexpected NAT66 policy bytes: %v", payload[8:])
+	}
+}
+
 func TestMetricsPayloadRoundTripsFixedCounters(t *testing.T) {
 	payload := make([]byte, 11*8)
 	for index := 0; index < 11; index++ {
