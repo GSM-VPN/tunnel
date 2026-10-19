@@ -64,9 +64,13 @@ func TestCoreControllerAuditsPeerApprovalChangesWithoutSecrets(t *testing.T) {
 	controller.SetLogger(logger)
 	controller.ApprovePeer(protocol.PeerRegistration{PeerID: 7, PublicKey: [32]byte{1}})
 	controller.RevokePeer(7)
+	controller.ApprovePeer(protocol.PeerRegistration{PeerID: 8, PublicKey: [32]byte{2}})
+	if err := controller.PurgePeerKey(context.Background(), 8, 1); err != nil {
+		t.Fatal(err)
+	}
 
 	logs := output.String()
-	for _, event := range []string{"peer_approval_updated", "peer_approval_revoked", "peer_id"} {
+	for _, event := range []string{"peer_approval_updated", "peer_approval_revoked", "peer_key_purged", "peer_id"} {
 		if !strings.Contains(logs, event) {
 			t.Fatalf("missing %q in logs: %s", event, logs)
 		}

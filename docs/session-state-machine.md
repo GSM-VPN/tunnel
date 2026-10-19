@@ -29,9 +29,10 @@ enter an unbounded retry loop. Successful handshakes reset both handshake and
 reconnect attempts; reaching the handshake limit enters `CLOSING`.
 
 The session tests assert that `RetryRequested` is invalid after authentication
-failure, permission revocation, and rekey failure. Key-purge behavior remains
-a separate management operation and is not implied by this state-machine
-guarantee.
+failure, permission revocation, rekey failure, and key purge. Key purge is a
+separate management operation: it removes the peer approval, closes every
+session owned by that peer, and does not restore the peer during a Core
+restart. A new client key requires a new explicit approval.
 
 The management `TerminateSession` operation is a connection-level close: it
 removes only the selected session and leaves the peer's long-term approval in

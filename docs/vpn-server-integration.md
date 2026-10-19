@@ -37,10 +37,12 @@ CoreController desired state
        └─ Core 재시작: 상태 재동기화
 ```
 
-승인 정보가 만료되거나 철회되면 Controller desired state에서 제거하고,
-실행 중 Core에는 `RemovePeer`를 호출한다. Rust Core는 철회된 Peer에 속한
-세션도 함께 제거한다. 승인되지 않은 Peer의 세션 생성은 Controller와 Core
-양쪽에서 거부한다.
+승인 정보가 만료되거나 일반 연결 해지되면 Controller desired state에서
+제거하고 실행 중 Core에는 `RemovePeer`를 호출한다. 키 파기는 별도
+`PurgeKey` 관리 동작으로 제공하며, 동일하게 Rust Core의 승인과 해당 Peer의
+모든 세션을 즉시 제거하고 `peer_key_purged` 감사 이벤트를 남긴다. 두 동작
+모두 승인되지 않은 Peer의 새 세션을 즉시 거부하고, Core 재시작 시 복원하지
+않는다. 새 공개키는 새 승인 절차를 거쳐야 한다.
 
 ## 서명 경계
 

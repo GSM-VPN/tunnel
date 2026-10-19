@@ -142,6 +142,18 @@ func (authorization VPNServerAuthorization) Revoke(ctx context.Context, parts []
 	return authorization.Controller.RevokePeerApproval(ctx, peerID, requestID)
 }
 
+// PurgeKey destroys the current client approval and closes its sessions. A
+// new key must be explicitly approved before that client can connect again.
+func (authorization VPNServerAuthorization) PurgeKey(ctx context.Context, parts []string, signature string, peerID, requestID uint64) error {
+	if authorization.Controller == nil {
+		return fmt.Errorf("%w: controller is required", ErrApprovalInvalid)
+	}
+	if err := authorization.Authenticator.Verify(parts, signature); err != nil {
+		return err
+	}
+	return authorization.Controller.PurgePeerKey(ctx, peerID, requestID)
+}
+
 // CreateSession creates a Core session only for a currently desired-approved
 // peer. Core repeats the authorization check at the data-plane boundary.
 func (authorization VPNServerAuthorization) CreateSession(ctx context.Context, peerID uint64, sessionID uint32, requestID uint64) (protocol.SessionStatus, error) {

@@ -88,6 +88,15 @@ func TestAuthorizationApprovalUpdatesDesiredStateWithoutExposingSecrets(t *testi
 	if _, ok := controller.DesiredState().peers[approval.PeerID]; ok {
 		t.Fatal("revoked approval remains in desired state")
 	}
+	if err := service.Approve(context.Background(), parts, signature, approval, 4); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.PurgeKey(context.Background(), parts, signature, approval.PeerID, 5); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.CreateSession(context.Background(), approval.PeerID, 2, 6); !errors.Is(err, ErrPeerNotApproved) {
+		t.Fatalf("purged key remained connectable: %v", err)
+	}
 }
 
 func validApproval(now time.Time) PeerApproval {
