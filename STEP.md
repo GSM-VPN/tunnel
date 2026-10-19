@@ -154,11 +154,11 @@ Tunnel Handshake / Encrypted Session
 
 - [x] Transport Data는 ChaCha20-Poly1305 AEAD로 보호
 - [x] Nonce와 Authentication Tag 사용
-- [ ] 헤더의 보안 관련 필드는 AEAD Additional Authenticated Data로 인증
-- [ ] Payload는 암호화하고 Authentication Tag는 패킷 끝에 배치
-- [ ] Nonce는 세션·키 세대·방향·Sequence Number 조합에서 안전하게 파생
-- [ ] Nonce 재사용 감지 또는 카운터 오버플로 시 세션 종료
-- [ ] 인증 실패 패킷은 Replay Window를 변경하지 않음
+- [x] 헤더의 보안 관련 필드는 AEAD Additional Authenticated Data로 인증
+- [x] Payload는 암호화하고 Authentication Tag는 패킷 끝에 배치
+- [x] Nonce는 세션·키 세대·방향·Sequence Number 조합에서 안전하게 파생
+- [x] Nonce 재사용 감지 또는 카운터 오버플로 시 세션 종료
+- [x] 인증 실패 패킷은 Replay Window를 변경하지 않음
 
 #### 장기 키 수명주기
 
