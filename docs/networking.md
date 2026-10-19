@@ -5,6 +5,13 @@ namespace integration, IP forwarding, nftables MASQUERADE, route management,
 DNS setup/restoration, IPv6 addressing, and endpoint exception routes are
 deployment work rather than automatic side effects of the library.
 
+`LinuxTunDevice` owns its `/dev/net/tun` descriptor and closes it from both the
+explicit `TunnelDevice::close` path and `Drop`. The adapter validates the
+requested Linux interface name before issuing `TUNSETIFF`; empty, embedded-NUL,
+and `IFNAMSIZ`-overflowing names are rejected locally. Names already occupied
+or inaccessible remain kernel/permission errors and are returned as a bounded
+`DeviceError::Io` rather than terminating the process.
+
 The intended initial values are:
 
 - VPN IPv4 range: `10.80.0.0/16`
