@@ -1056,43 +1056,43 @@ DISCONNECTED
 
 ### 13.1. Unit Test
 
-- [ ] 타입 검증
-- [ ] 상태 전이
-- [ ] 송수신 카운터
-- [ ] Replay Window
-- [ ] 세션 테이블
-- [ ] 설정 검증
+- [x] 타입 검증
+- [x] 상태 전이
+- [x] 송수신 카운터
+- [x] Replay Window
+- [x] 세션 테이블
+- [x] 설정 검증
 - [ ] 오류 매핑
-- [ ] 타임아웃 계산
-- [ ] 재시도 정책
+- [x] 타임아웃 계산
+- [x] 재시도 정책
 
 ### 13.2. Protocol Test
 
-- [ ] Encode/decode
-- [ ] 버전 호환성
-- [ ] 패킷 길이
-- [ ] Packet Type
-- [ ] 최대 크기
-- [ ] 잘못된 헤더
-- [ ] 빈 Payload
-- [ ] 알 수 없는 Session ID
-- [ ] 임의 입력
+- [x] Encode/decode
+- [x] 버전 호환성
+- [x] 패킷 길이
+- [x] Packet Type
+- [x] 최대 크기
+- [x] 잘못된 헤더
+- [x] 빈 Payload
+- [x] 알 수 없는 Session ID
+- [x] 임의 입력
 - [ ] Fuzzing
 
 ### 13.3. Cryptography Test
 
-- [ ] 정상 핸드셰이크
-- [ ] 서버 인증 실패
+- [x] 정상 핸드셰이크
+- [x] 서버 인증 실패
 - [ ] 클라이언트 인증 실패
-- [ ] 암호화·복호화
+- [x] 암호화·복호화
 - [ ] 알려진 테스트 벡터
-- [ ] 변조 패킷
-- [ ] 잘못된 키
-- [ ] 잘못된 인증 태그
-- [ ] Nonce 중복 방지
-- [ ] 키 갱신
-- [ ] Replay 공격
-- [ ] 세션 키 격리
+- [x] 변조 패킷
+- [x] 잘못된 키
+- [x] 잘못된 인증 태그
+- [x] Nonce 중복 방지
+- [x] 키 갱신
+- [x] Replay 공격
+- [x] 세션 키 격리
 
 ### 13.4. Network Integration Test
 
