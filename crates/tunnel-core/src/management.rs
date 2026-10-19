@@ -1,8 +1,14 @@
 //! Versioned control-plane IPC frames shared with the Go controller.
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
-use crate::{Metrics, PeerAuthorization, PeerRegistry, PeerRegistryError};
+use crate::{
+    LifecycleState, Metrics, PeerAuthorization, PeerRegistry, PeerRegistryError,
+    TunnelNetworkConfig,
+};
 
 const FRAME_PREFIX: usize = 4;
 const REQUEST_HEADER: usize = 2 + 8 + 2 + 4;
@@ -29,6 +35,10 @@ pub const STATUS_BAD_REQUEST: u16 = 400;
 pub const STATUS_NOT_FOUND: u16 = 404;
 pub const STATUS_CONFLICT: u16 = 409;
 pub const STATUS_NOT_IMPLEMENTED: u16 = 501;
+pub const STATUS_UNAVAILABLE: u16 = 503;
+
+const SESSION_PAYLOAD_SIZE: usize = 12;
+const CONFIG_PAYLOAD_SIZE: usize = 10;
 
 fn is_known_operation(operation: u16) -> bool {
     (OPERATION_INITIALIZE..=OPERATION_GET_HEALTH).contains(&operation)
@@ -55,6 +65,24 @@ pub struct ManagementResponse {
 pub struct ManagementService {
     peers: PeerRegistry,
     metrics: Metrics,
+    state: EngineState,
+    config: TunnelNetworkConfig,
+    sessions: HashMap<u32, ManagedSession>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EngineState {
+    Uninitialized,
+    Ready,
+    Running,
+    Stopped,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ManagedSession {
+    pub session_id: u32,
+    pub peer_id: u64,
+    pub state: LifecycleState,
 }
 
 impl ManagementService {
@@ -64,13 +92,24 @@ impl ManagementService {
         Self {
             peers: PeerRegistry::new(max_peers),
             metrics,
+            state: EngineState::Uninitialized,
+            config: TunnelNetworkConfig::default(),
+            sessions: HashMap::new(),
         }
+    }
+
+    #[must_use]
+    pub const fn state(&self) -> EngineState {
+        self.state
     }
 
     /// Dispatches one decoded control-plane request.
     #[must_use]
     pub fn handle(&mut self, request: &ManagementRequest, now: SystemTime) -> ManagementResponse {
         let (status, error_code, payload) = match request.operation {
+            OPERATION_INITIALIZE => self.initialize(&request.payload),
+            OPERATION_START => self.start(&request.payload),
+            OPERATION_STOP => self.stop(&request.payload),
             OPERATION_REGISTER_PEER => match decode_peer_registration(&request.payload) {
                 Ok(peer) => match self.register_peer(peer, now) {
                     Ok(()) => (STATUS_OK, 0, Vec::new()),
@@ -89,8 +128,13 @@ impl ManagementService {
                 Ok(()) => (STATUS_OK, 0, Vec::new()),
                 Err(status) => (status, 2, Vec::new()),
             },
-            OPERATION_GET_HEALTH => (STATUS_OK, 0, b"healthy".to_vec()),
+            OPERATION_GET_HEALTH => self.health(),
             OPERATION_GET_STATISTICS => (STATUS_OK, 0, encode_metrics(&self.metrics)),
+            OPERATION_CREATE_SESSION => self.create_session(&request.payload, now),
+            OPERATION_TERMINATE_SESSION => self.terminate_session(&request.payload),
+            OPERATION_GET_SESSION => self.get_session(&request.payload),
+            OPERATION_LIST_SESSIONS => (STATUS_OK, 0, encode_sessions(&self.sessions)),
+            OPERATION_UPDATE_CONFIGURATION => self.update_configuration(&request.payload),
             _ => (STATUS_NOT_IMPLEMENTED, 3, Vec::new()),
         };
         ManagementResponse {
@@ -122,6 +166,184 @@ impl ManagementService {
             now,
         )
     }
+
+    fn initialize(&mut self, payload: &[u8]) -> (u16, u16, Vec<u8>) {
+        if !payload.is_empty() {
+            return (STATUS_BAD_REQUEST, 4, Vec::new());
+        }
+        match self.state {
+            EngineState::Uninitialized | EngineState::Stopped => {
+                self.state = EngineState::Ready;
+                (STATUS_OK, 0, Vec::new())
+            }
+            EngineState::Ready | EngineState::Running => (STATUS_CONFLICT, 4, Vec::new()),
+        }
+    }
+
+    fn start(&mut self, payload: &[u8]) -> (u16, u16, Vec<u8>) {
+        if !payload.is_empty() {
+            return (STATUS_BAD_REQUEST, 4, Vec::new());
+        }
+        match self.state {
+            EngineState::Ready => {
+                self.state = EngineState::Running;
+                (STATUS_OK, 0, Vec::new())
+            }
+            EngineState::Uninitialized | EngineState::Stopped => {
+                (STATUS_UNAVAILABLE, 5, Vec::new())
+            }
+            EngineState::Running => (STATUS_CONFLICT, 4, Vec::new()),
+        }
+    }
+
+    fn stop(&mut self, payload: &[u8]) -> (u16, u16, Vec<u8>) {
+        if !payload.is_empty() {
+            return (STATUS_BAD_REQUEST, 4, Vec::new());
+        }
+        match self.state {
+            EngineState::Running | EngineState::Ready => {
+                self.sessions.clear();
+                self.state = EngineState::Stopped;
+                (STATUS_OK, 0, Vec::new())
+            }
+            EngineState::Stopped | EngineState::Uninitialized => (STATUS_CONFLICT, 4, Vec::new()),
+        }
+    }
+
+    fn create_session(&mut self, payload: &[u8], now: SystemTime) -> (u16, u16, Vec<u8>) {
+        let Ok((session_id, peer_id)) = decode_session_payload(payload) else {
+            return (STATUS_BAD_REQUEST, 6, Vec::new());
+        };
+        if self.state != EngineState::Running {
+            return (STATUS_UNAVAILABLE, 5, Vec::new());
+        }
+        let peer_is_authorized = self
+            .peers
+            .active_summaries(now)
+            .iter()
+            .any(|peer| peer.peer_id == peer_id);
+        if !peer_is_authorized {
+            return (STATUS_NOT_FOUND, 2, Vec::new());
+        }
+        if self.sessions.contains_key(&session_id) {
+            return (STATUS_CONFLICT, 4, Vec::new());
+        }
+        self.sessions.insert(
+            session_id,
+            ManagedSession {
+                session_id,
+                peer_id,
+                state: LifecycleState::Established,
+            },
+        );
+        self.metrics.session_started();
+        (STATUS_OK, 0, encode_session(&self.sessions[&session_id]))
+    }
+
+    fn terminate_session(&mut self, payload: &[u8]) -> (u16, u16, Vec<u8>) {
+        let Ok((session_id, _)) = decode_session_payload(payload) else {
+            return (STATUS_BAD_REQUEST, 6, Vec::new());
+        };
+        if self.sessions.remove(&session_id).is_none() {
+            return (STATUS_NOT_FOUND, 2, Vec::new());
+        }
+        self.metrics.session_closed();
+        (STATUS_OK, 0, Vec::new())
+    }
+
+    fn get_session(&self, payload: &[u8]) -> (u16, u16, Vec<u8>) {
+        let Ok((session_id, _)) = decode_session_payload(payload) else {
+            return (STATUS_BAD_REQUEST, 6, Vec::new());
+        };
+        self.sessions
+            .get(&session_id)
+            .map_or((STATUS_NOT_FOUND, 2, Vec::new()), |session| {
+                (STATUS_OK, 0, encode_session(session))
+            })
+    }
+
+    fn update_configuration(&mut self, payload: &[u8]) -> (u16, u16, Vec<u8>) {
+        match decode_configuration(payload) {
+            Ok(config) => match config.validate() {
+                Ok(_) if self.state != EngineState::Running => {
+                    self.config = config;
+                    (STATUS_OK, 0, Vec::new())
+                }
+                Ok(_) => (STATUS_CONFLICT, 4, Vec::new()),
+                Err(_) => (STATUS_BAD_REQUEST, 6, Vec::new()),
+            },
+            Err(()) => (STATUS_BAD_REQUEST, 6, Vec::new()),
+        }
+    }
+
+    fn health(&self) -> (u16, u16, Vec<u8>) {
+        let (status, label) = match self.state {
+            EngineState::Running => (STATUS_OK, "running"),
+            EngineState::Ready => (STATUS_OK, "ready"),
+            EngineState::Stopped => (STATUS_UNAVAILABLE, "stopped"),
+            EngineState::Uninitialized => (STATUS_UNAVAILABLE, "uninitialized"),
+        };
+        (status, 0, label.as_bytes().to_vec())
+    }
+}
+
+fn decode_session_payload(payload: &[u8]) -> Result<(u32, u64), ()> {
+    if payload.len() != SESSION_PAYLOAD_SIZE {
+        return Err(());
+    }
+    Ok((
+        u32::from_be_bytes(payload[0..4].try_into().map_err(|_| ())?),
+        u64::from_be_bytes(payload[4..12].try_into().map_err(|_| ())?),
+    ))
+}
+
+fn encode_session(session: &ManagedSession) -> Vec<u8> {
+    let mut payload = Vec::with_capacity(SESSION_PAYLOAD_SIZE + 1);
+    payload.extend_from_slice(&session.session_id.to_be_bytes());
+    payload.extend_from_slice(&session.peer_id.to_be_bytes());
+    payload.push(session_state_code(session.state));
+    payload
+}
+
+fn encode_sessions(sessions: &HashMap<u32, ManagedSession>) -> Vec<u8> {
+    let mut ordered: Vec<_> = sessions.values().collect();
+    ordered.sort_by_key(|session| session.session_id);
+    ordered.into_iter().flat_map(encode_session).collect()
+}
+
+fn session_state_code(state: LifecycleState) -> u8 {
+    match state {
+        LifecycleState::Disconnected => 0,
+        LifecycleState::Connecting => 1,
+        LifecycleState::Handshaking => 2,
+        LifecycleState::Established => 3,
+        LifecycleState::Rekeying => 4,
+        LifecycleState::Reconnecting => 5,
+        LifecycleState::Closing => 6,
+        LifecycleState::Closed => 7,
+    }
+}
+
+fn decode_configuration(payload: &[u8]) -> Result<TunnelNetworkConfig, ()> {
+    if payload.len() != CONFIG_PAYLOAD_SIZE {
+        return Err(());
+    }
+    let ipv4_prefix = payload[0];
+    let ipv6_prefix = payload[1];
+    let udp_port = u16::from_be_bytes(payload[2..4].try_into().map_err(|_| ())?);
+    let mtu = u16::from_be_bytes(payload[4..6].try_into().map_err(|_| ())?);
+    let dual_stack = payload[6] != 0;
+    let kill_switch = payload[7] != 0;
+    if ipv4_prefix != 16 || ipv6_prefix != 64 || payload[8..10] != [0, 0] {
+        return Err(());
+    }
+    Ok(TunnelNetworkConfig {
+        udp_port,
+        mtu: usize::from(mtu),
+        dual_stack,
+        kill_switch,
+        ..TunnelNetworkConfig::default()
+    })
 }
 
 fn status_for_peer_error(error: &PeerRegistryError) -> u16 {
@@ -565,6 +787,150 @@ mod tests {
         assert_eq!(
             decode_peer_removal(&[1, 2]),
             Err(ManagementError::InvalidPeerPayload)
+        );
+    }
+
+    #[test]
+    fn manages_engine_state_and_authorized_sessions() {
+        let mut service = ManagementService::new(2, Metrics::default());
+        let request = |operation, payload| ManagementRequest {
+            version: 1,
+            request_id: 1,
+            operation,
+            payload,
+        };
+        assert_eq!(service.state(), EngineState::Uninitialized);
+        assert_eq!(
+            service
+                .handle(&request(OPERATION_START, Vec::new()), UNIX_EPOCH)
+                .status,
+            STATUS_UNAVAILABLE
+        );
+        assert_eq!(
+            service
+                .handle(&request(OPERATION_INITIALIZE, Vec::new()), UNIX_EPOCH)
+                .status,
+            STATUS_OK
+        );
+        assert_eq!(
+            service
+                .handle(&request(OPERATION_START, Vec::new()), UNIX_EPOCH)
+                .status,
+            STATUS_OK
+        );
+
+        let peer = PeerRegistrationPayload {
+            peer_id: 7,
+            public_key: [3; 32],
+            ipv4: Some([10, 80, 0, 2]),
+            ipv6: None,
+            expires_at_unix: 120,
+            user_id: "user-7".to_owned(),
+        };
+        assert_eq!(
+            service
+                .handle(
+                    &request(
+                        OPERATION_REGISTER_PEER,
+                        encode_peer_registration(&peer).unwrap()
+                    ),
+                    UNIX_EPOCH
+                )
+                .status,
+            STATUS_OK
+        );
+        let mut session_payload = Vec::new();
+        session_payload.extend_from_slice(&9_u32.to_be_bytes());
+        session_payload.extend_from_slice(&7_u64.to_be_bytes());
+        let created = service.handle(
+            &request(OPERATION_CREATE_SESSION, session_payload.clone()),
+            UNIX_EPOCH,
+        );
+        assert_eq!(created.status, STATUS_OK);
+        assert_eq!(created.payload.len(), SESSION_PAYLOAD_SIZE + 1);
+        assert_eq!(
+            service
+                .handle(
+                    &request(OPERATION_GET_SESSION, session_payload.clone()),
+                    UNIX_EPOCH
+                )
+                .status,
+            STATUS_OK
+        );
+        assert_eq!(
+            service
+                .handle(
+                    &request(OPERATION_TERMINATE_SESSION, session_payload),
+                    UNIX_EPOCH
+                )
+                .status,
+            STATUS_OK
+        );
+        assert_eq!(
+            service
+                .handle(
+                    &request(OPERATION_GET_SESSION, vec![0; SESSION_PAYLOAD_SIZE]),
+                    UNIX_EPOCH
+                )
+                .status,
+            STATUS_NOT_FOUND
+        );
+    }
+
+    #[test]
+    fn prevents_live_configuration_changes_and_clears_sessions_on_stop() {
+        let mut service = ManagementService::new(1, Metrics::default());
+        let request = |operation, payload| ManagementRequest {
+            version: 1,
+            request_id: 1,
+            operation,
+            payload,
+        };
+        assert_eq!(
+            service
+                .handle(&request(OPERATION_INITIALIZE, Vec::new()), UNIX_EPOCH)
+                .status,
+            STATUS_OK
+        );
+        let mut config = vec![16, 64, 0xCA, 0x6C, 0x05, 0x78, 1, 0, 0, 0];
+        assert_eq!(
+            service
+                .handle(
+                    &request(OPERATION_UPDATE_CONFIGURATION, std::mem::take(&mut config)),
+                    UNIX_EPOCH
+                )
+                .status,
+            STATUS_OK
+        );
+        assert_eq!(
+            service
+                .handle(&request(OPERATION_START, Vec::new()), UNIX_EPOCH)
+                .status,
+            STATUS_OK
+        );
+        assert_eq!(
+            service
+                .handle(
+                    &request(
+                        OPERATION_UPDATE_CONFIGURATION,
+                        vec![16, 64, 0xCA, 0x6C, 0x05, 0x78, 1, 0, 0, 0]
+                    ),
+                    UNIX_EPOCH
+                )
+                .status,
+            STATUS_CONFLICT
+        );
+        assert_eq!(
+            service
+                .handle(&request(OPERATION_STOP, Vec::new()), UNIX_EPOCH)
+                .status,
+            STATUS_OK
+        );
+        assert_eq!(
+            service
+                .handle(&request(OPERATION_LIST_SESSIONS, Vec::new()), UNIX_EPOCH)
+                .payload,
+            Vec::<u8>::new()
         );
     }
 }

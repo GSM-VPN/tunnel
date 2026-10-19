@@ -117,8 +117,8 @@ mod tests {
         client.read_exact(&mut response[4..]).unwrap();
         let decoded = crate::ManagementResponse::decode(&response).unwrap();
         assert_eq!(decoded.request_id, 9);
-        assert_eq!(decoded.status, 200);
-        assert_eq!(decoded.payload, b"healthy");
+        assert_eq!(decoded.status, 503);
+        assert_eq!(decoded.payload, b"uninitialized");
         handle.join().unwrap().unwrap();
     }
 }

@@ -80,6 +80,25 @@ func TestManagementResponseRoundTripsLengthPrefixedFrame(t *testing.T) {
 	}
 }
 
+func TestSessionPayloadAndStatusRoundTrip(t *testing.T) {
+	request := SessionRequest{SessionID: 9, PeerID: 7}
+	status, err := UnmarshalSessionStatus(append(request.MarshalBinary(), 3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != (SessionStatus{SessionID: 9, PeerID: 7, State: 3}) {
+		t.Fatalf("unexpected session status: %+v", status)
+	}
+}
+
+func TestNetworkConfigurationPayloadUsesStableLayout(t *testing.T) {
+	payload := (NetworkConfiguration{UDPPort: 51820, MTU: 1400, DualStack: true}).MarshalBinary()
+	want := []byte{16, 64, 0xca, 0x6c, 0x05, 0x78, 1, 0, 0, 0}
+	if !reflect.DeepEqual(payload, want) {
+		t.Fatalf("unexpected configuration payload: %v", payload)
+	}
+}
+
 func TestManagementFrameRejectsTruncationAndOversize(t *testing.T) {
 	request := ManagementRequest{Version: ManagementVersion, RequestID: 1, Operation: OperationHealth}
 	frame, err := request.MarshalFrame()
