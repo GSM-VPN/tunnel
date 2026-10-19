@@ -318,7 +318,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_wrong_responder_key_and_message_order() {
+    fn rejects_client_authentication_and_wrong_message_order() {
         let params: NoiseParams = NOISE_IK_PARAMS.parse().unwrap();
         let builder = Builder::new(params);
         let initiator_key = builder.generate_keypair().unwrap();
