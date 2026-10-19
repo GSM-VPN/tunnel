@@ -68,7 +68,7 @@ impl TryFrom<u8> for PacketType {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct SessionId(pub u32);
 
 impl SessionId {

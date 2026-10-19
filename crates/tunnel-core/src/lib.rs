@@ -7,6 +7,7 @@ mod encrypted_engine;
 mod engine;
 mod protocol;
 mod session;
+mod session_table;
 mod transport;
 
 #[cfg(target_os = "linux")]
@@ -40,4 +41,5 @@ pub use protocol::{
 pub use session::{
     LifecycleState, SessionError, SessionEvent, SessionMachine, SessionPolicy, Transition,
 };
+pub use session_table::{SessionTable, SessionTableError};
 pub use transport::{TransportError, UdpTransport};
