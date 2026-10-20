@@ -3,6 +3,7 @@ use chacha20poly1305::{
     aead::{Aead, Payload},
 };
 use sha2::{Digest, Sha256};
+use std::sync::Mutex;
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::protocol::{AEAD_TAG_SIZE, HEADER_SIZE};
@@ -118,6 +119,42 @@ impl ReplayWindow {
                 value
             });
         }
+    }
+}
+
+/// Thread-safe Replay Window for parallel authenticated-packet workers.
+#[derive(Debug, Default)]
+pub struct ConcurrentReplayWindow {
+    inner: Mutex<ReplayWindow>,
+}
+
+impl ConcurrentReplayWindow {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            inner: Mutex::new(ReplayWindow::new()),
+        }
+    }
+
+    /// Checks a sequence without reserving it.
+    #[must_use]
+    pub fn accepts(&self, sequence: u64) -> bool {
+        self.inner
+            .lock()
+            .is_ok_and(|window| window.accepts(sequence))
+    }
+
+    /// Atomically checks and records a sequence.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CryptoError::Replay`] for a duplicate, stale, or poisoned
+    /// window.
+    pub fn accept(&self, sequence: u64) -> Result<(), CryptoError> {
+        self.inner
+            .lock()
+            .map_err(|_| CryptoError::Replay)?
+            .accept(sequence)
     }
 }
 
@@ -256,7 +293,7 @@ impl SessionCipher {
 
 #[cfg(test)]
 mod tests {
-    use super::{CryptoError, ReplayWindow, SessionCipher};
+    use super::{ConcurrentReplayWindow, CryptoError, ReplayWindow, SessionCipher};
     use crate::{
         KeyGeneration, MAX_ENCRYPTED_PAYLOAD_SIZE, PacketType, ProtocolVersion, SessionId,
         TunnelHeader,
@@ -330,6 +367,27 @@ mod tests {
             Err(CryptoError::InvalidKeyGeneration)
         );
         assert_eq!(cipher.key_generation(), KeyGeneration(2));
+    }
+
+    #[test]
+    fn concurrent_replay_window_accepts_a_sequence_once() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let window = Arc::new(ConcurrentReplayWindow::new());
+        let workers: Vec<_> = (0..8)
+            .map(|_| {
+                let window = Arc::clone(&window);
+                thread::spawn(move || window.accept(42).is_ok())
+            })
+            .collect();
+        let accepted = workers
+            .into_iter()
+            .map(|worker| worker.join().expect("worker completes"))
+            .filter(|accepted| *accepted)
+            .count();
+        assert_eq!(accepted, 1);
+        assert_eq!(window.accept(42), Err(CryptoError::Replay));
     }
 
     #[test]
