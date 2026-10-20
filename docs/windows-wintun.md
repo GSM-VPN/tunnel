@@ -50,6 +50,8 @@ Wintun 소스 저장소의 소스와 문서는 GPLv2 조건을 따르며, 공식
   session shutdown 이후 순서대로 해제한다.
 - Linux 빌드에는 Wintun 의존성과 모듈이 포함되지 않는다.
 - Windows target 정적 빌드와 실제 adapter 권한·DLL·packet I/O 검증은
-  Windows CI 또는 전용 Windows host에서 수행해야 한다.
+  Windows CI 또는 전용 Windows host에서 수행해야 한다. Windows CI는
+  `windows-latest` runner에서 formatting, clippy, workspace 단위 테스트를
+  수행하지만 Wintun driver 설치와 실제 adapter 생성은 수행하지 않는다.
 - 실제 검증 전에는 Windows Wintun의 adapter·네트워크·인터넷 연결
   체크포인트를 완료 처리하지 않는다.

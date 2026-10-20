@@ -253,7 +253,9 @@ mod tests {
         assert!(!registry.is_authorized(1, &key, UNIX_EPOCH + Duration::from_secs(120)));
         let summaries = registry.active_summaries(now);
         assert_eq!(summaries.len(), 1);
-        assert!(!format!("{:?}", summaries[0]).contains('7'));
+        let summary_debug = format!("{:?}", summaries[0]);
+        assert!(!summary_debug.contains("public_key"));
+        assert!(!summary_debug.contains("[7, 7"));
     }
 
     #[test]

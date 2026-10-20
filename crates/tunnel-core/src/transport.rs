@@ -275,10 +275,12 @@ mod tests {
             .set_read_timeout(Some(Duration::from_millis(1)))
             .expect("timeout configures");
         let mut buffer = [0; 1_400];
-        assert_eq!(
+        assert!(matches!(
             receiver.receive(&mut buffer),
-            Err(TransportError::Io(std::io::ErrorKind::WouldBlock))
-        );
+            Err(TransportError::Io(
+                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+            ))
+        ));
     }
 
     #[test]
