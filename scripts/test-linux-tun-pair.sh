@@ -50,11 +50,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-unshare --net --mount-proc sleep infinity &
-client_namespace_pid=$!
-unshare --net --mount-proc sleep infinity &
-server_namespace_pid=$!
-
 GSM_TUN_STOP_FILE="$stop_file" "$helper_binary" >"$output_file" 2>&1 &
 helper_pid=$!
 
@@ -70,6 +65,10 @@ for _ in $(seq 1 50); do
 done
 
 grep -q '^ready client=gsmclient0 server=gsmserver0$' "$output_file"
+unshare --net --mount-proc sleep infinity &
+client_namespace_pid=$!
+unshare --net --mount-proc sleep infinity &
+server_namespace_pid=$!
 ip link set gsmclient0 netns "$client_namespace_pid"
 ip link set gsmserver0 netns "$server_namespace_pid"
 nsenter -t "$client_namespace_pid" -n ip link set lo up
