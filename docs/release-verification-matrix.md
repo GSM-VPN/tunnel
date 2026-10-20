@@ -15,7 +15,7 @@
 | 운영 절차와 WireGuard rollback | policy-documented | `docs/wireguard-rollback-policy.md`, `docs/vpn-server-lifecycle.md`, `docs/vpn-server-integration.md` |
 | Linux TUN·namespace·forwarding/NAT | required | 권한 있는 Linux 시나리오와 `docs/recovery-test-plan.md`의 결과 기록 필요 |
 | DNS·IPv6 leak·Kill Switch | required | 실제 OS 네트워크 경로에서 독립 실행 필요 |
-| Windows/Wintun·macOS adapter | required | 대상 OS와 adapter가 있는 환경에서 별도 검증 필요 |
+| Windows/Wintun·macOS adapter | required | `docs/platform-support.md`에 범위를 기록했으며 대상 OS와 adapter가 있는 환경에서 별도 검증 필요 |
 | 암호화·프로토콜 독립 검토 | required | 외부 검토 보고서가 배포 gate |
 
 `required` 항목을 단위 테스트나 문서 존재만으로 `verified`로 바꾸지 않는다.
