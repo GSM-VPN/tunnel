@@ -31,7 +31,7 @@ mod peer;
 
 pub use address_pool::{AddressPoolError, ClientAddressPool, ClientAddresses};
 pub use codec::{TunnelHeader, TunnelPacket};
-pub use crypto::{CryptoError, ReplayWindow, SessionCipher};
+pub use crypto::{ConcurrentReplayWindow, CryptoError, ReplayWindow, SessionCipher};
 pub use device::{DeviceError, MemoryDevice, TunnelDevice};
 pub use dns::{
     DnsCache, DnsCommand, DnsConfigError, DnsPolicy, DnsResolverPolicy, DnsSecureUpstream,
