@@ -16,5 +16,6 @@ checks that closing the helper removes the non-persistent interface.
 
 The two-sided Linux path is available at `scripts/test-linux-tun-pair.sh`. It
 creates client and server TUN interfaces plus two UDP endpoints in the same
-isolated namespace, then verifies that an ICMP echo request and reply cross the
-unencrypted tunnel before both interfaces are removed.
+isolated namespace, then verifies that an ICMP echo request is delivered in
+each direction across the unencrypted tunnel before both interfaces are
+removed.
