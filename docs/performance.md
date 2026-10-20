@@ -22,6 +22,18 @@ benchmark target은 재사용 가능한 코어 경로 신호를 제공하지만 
 cargo bench --package tunnel-core --benches
 ```
 
+재현 조건과 원시 출력을 Markdown 보고서로 함께 남기려면 다음 실행기를
+사용한다.
+
+```bash
+./scripts/run-core-benchmarks.sh benchmark-results/core-benchmark.md
+```
+
+실행기는 commit, 호스트, Rust toolchain과 함께 `BENCH_MTU`,
+`BENCH_BANDWIDTH`, `BENCH_CONCURRENT_SESSIONS`, `BENCH_TRAFFIC_PATTERN`,
+`BENCH_REPETITIONS` 환경 변수를 기록한다. 이 값들은 측정 조건을 설명하며
+결정론적 Core benchmark의 입력을 바꾸지 않는다.
+
 target은 고정 입력을 사용하고 기계가 읽을 수 있는 key/value 필드를 출력한다.
 
 | Target | 범위 | 고정 작업량 |
