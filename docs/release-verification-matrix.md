@@ -22,3 +22,21 @@
 실제 결과를 추가할 때는 커밋, 환경, 명령, 관찰 결과, 정리 결과를 함께
 기록하고 관련 STEP 체크포인트를 그때 갱신한다. 자체 엔진 검증 전에는 기존
 WireGuard 경로와 rollback 절차를 유지한다.
+
+## `STEP.md` 최종 체크리스트와의 대응
+
+다음 항목은 저장소 내부 테스트와 CI에서 반복 실행되는 근거가 있으므로
+최종 체크리스트에 반영한다.
+
+| 최종 기준 | 검증 근거 | 범위 제한 |
+| --- | --- | --- |
+| Linux TUN 간 양방향 IP 패킷 전달 | `scripts/test-linux-tun-pair.sh`, `linux-tun-pair` 예제 | namespace 내부 양방향 패킷 전달까지이며 외부 인터넷은 포함하지 않음 |
+| UDP 기반 터널 전송 | `UdpTransport` 단위 테스트와 TUN pair CI | 실제 공용망 손실·지연 조건은 포함하지 않음 |
+| 기본 패킷 검증과 오류 처리 | protocol decoder 테스트, fuzz workflow, malformed datagram 테스트 | 독립 보안 검토를 대체하지 않음 |
+| 인증·암호화·Replay·세션 수명주기 | `noise`, `crypto`, `session`, `key_rotation` 테스트 | 배포 환경 보안 승인이나 외부 감사는 포함하지 않음 |
+| Go Controller와 Rust Core IPC | `scripts/test-tunnel-core-integration.sh`와 Go Controller 테스트 | Gateway 로그인과 VPN Server 외부 HTTP 서비스는 포함하지 않음 |
+
+반대로 실제 VPN Server의 IP forwarding/NAT, DNS·IPv6 leak, Windows
+Wintun, Kill Switch, 외부 인터넷 출구와 독립 보안 검토는 이 표의
+`required` 상태를 유지한다. 해당 항목은 권한 있는 환경에서 재현 결과를
+기록한 뒤에만 `STEP.md`에서 체크한다.
