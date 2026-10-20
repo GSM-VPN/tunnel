@@ -64,7 +64,8 @@ DNS 질의 원문, 개인키는 상태·IPC·로그에 포함하지 않는다.
 자체 엔진의 코어 테스트가 통과한 것만으로 기존 WireGuard를 제거하거나
 실제 사용자 트래픽을 전환하지 않는다. 배포 어댑터는 WireGuard 설정
 snapshot, 적용 전 endpoint 예외 경로, 실패 시 원복 명령, 비정상 종료 후
-복구 결과를 별도 증거로 기록해야 한다.
+복구 결과를 별도 증거로 기록해야 한다. 전환 게이트와 증거 형식은
+[`wireguard-rollback-policy.md`](wireguard-rollback-policy.md)에 정의한다.
 
 ## 검증 범위
 

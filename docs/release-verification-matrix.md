@@ -12,7 +12,7 @@
 | Controller ↔ Rust Core IPC | verified | `scripts/test-tunnel-core-integration.sh`, `docs/development.md` |
 | Gateway 승인 결과 경계 | verified | `GatewayApprovalResult`, `docs/vpn-server-integration.md` |
 | 세션·Core 재시작 정책 | verified | `internal/controller/*_test.go`, `docs/recovery-test-plan.md` |
-| 운영 절차와 WireGuard rollback | documented | `docs/vpn-server-lifecycle.md`, `docs/vpn-server-integration.md` |
+| 운영 절차와 WireGuard rollback | policy-documented | `docs/wireguard-rollback-policy.md`, `docs/vpn-server-lifecycle.md`, `docs/vpn-server-integration.md` |
 | Linux TUN·namespace·forwarding/NAT | required | 권한 있는 Linux 시나리오와 `docs/recovery-test-plan.md`의 결과 기록 필요 |
 | DNS·IPv6 leak·Kill Switch | required | 실제 OS 네트워크 경로에서 독립 실행 필요 |
 | Windows/Wintun·macOS adapter | required | 대상 OS와 adapter가 있는 환경에서 별도 검증 필요 |
