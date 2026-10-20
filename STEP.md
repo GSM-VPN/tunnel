@@ -682,16 +682,16 @@ Device Interface
 
 ### 6.1. 서버 네트워크 설정
 
-- [ ] Linux IP Forwarding 활성화
-- [ ] 서버 TUN 주소 설정
-- [ ] VPN 내부 IP 대역 설정
+- [x] Linux IP Forwarding 활성화
+- [x] 서버 TUN 주소 설정
+- [x] VPN 내부 IP 대역 설정
 - [ ] 외부 NIC 확인
 - [ ] Routing Table 구성
-- [ ] nftables 규칙 구성
-- [ ] SNAT/MASQUERADE 구성
+- [x] nftables 규칙 구성
+- [x] SNAT/MASQUERADE 구성
 - [x] 클라이언트별 내부 IP 검증
 - [x] 잘못된 출발지 IP 차단
-- [ ] 서버 종료 시 규칙 정리
+- [x] 서버 종료 시 규칙 정리
 
 ### 6.2. 클라이언트 라우팅
 
