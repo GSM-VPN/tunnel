@@ -119,6 +119,7 @@ pub enum NetworkConfigError {
     InvalidInterfaceMtu,
     InvalidPathMtu,
     InvalidPacketTooBigMtu,
+    InvalidRouteProbeOutput,
 }
 
 /// One argv-safe command emitted by the privileged Linux network adapter.
@@ -134,6 +135,54 @@ impl NetworkCommand {
             program: program.to_owned(),
             args: args.into_iter().collect(),
         }
+    }
+}
+
+/// Route lookup used to identify the physical interface for a tunnel endpoint.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct LinuxExternalRouteProbe {
+    pub endpoint: SocketAddr,
+}
+
+impl LinuxExternalRouteProbe {
+    /// Creates a route probe without executing a system command.
+    #[must_use]
+    pub const fn new(endpoint: SocketAddr) -> Self {
+        Self { endpoint }
+    }
+
+    /// Builds the argv-safe `ip route get` command for the endpoint family.
+    #[must_use]
+    pub fn command(self) -> NetworkCommand {
+        let mut args = vec!["route".to_owned(), "get".to_owned()];
+        if self.endpoint.ip().is_ipv6() {
+            args.insert(0, "-6".to_owned());
+        }
+        args.push(self.endpoint.ip().to_string());
+        NetworkCommand::new("ip", args)
+    }
+
+    /// Extracts the physical interface from `ip route get` output.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NetworkConfigError::InvalidRouteProbeOutput`] when the
+    /// output does not contain a valid `dev <interface>` pair.
+    pub fn parse_interface(output: &str) -> Result<String, NetworkConfigError> {
+        let mut tokens = output.split_whitespace();
+        while let Some(token) = tokens.next() {
+            if token != "dev" {
+                continue;
+            }
+            let interface = tokens
+                .next()
+                .ok_or(NetworkConfigError::InvalidRouteProbeOutput)?;
+            if valid_interface_name(interface) {
+                return Ok(interface.to_owned());
+            }
+            return Err(NetworkConfigError::InvalidRouteProbeOutput);
+        }
+        Err(NetworkConfigError::InvalidRouteProbeOutput)
     }
 }
 
@@ -990,9 +1039,9 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
     use super::{
-        LinuxClientNetworkPlan, LinuxClientRoutePlan, LinuxKillSwitchPlan, LinuxNetworkPlan,
-        LinuxRouteSnapshot, LinuxRouteState, MtuBudget, NetworkConfigError, PathMtuObservation,
-        TunnelNetworkConfig,
+        LinuxClientNetworkPlan, LinuxClientRoutePlan, LinuxExternalRouteProbe, LinuxKillSwitchPlan,
+        LinuxNetworkPlan, LinuxRouteSnapshot, LinuxRouteState, MtuBudget, NetworkConfigError,
+        PathMtuObservation, TunnelNetworkConfig,
     };
 
     fn valid_ipv4_packet(payload: &[u8]) -> Vec<u8> {
@@ -1182,6 +1231,42 @@ mod tests {
         assert_eq!(
             plan.cleanup_commands()[0].args.as_slice(),
             ["delete", "table", "inet", "gsm_tunnel"]
+        );
+    }
+
+    #[test]
+    fn builds_route_probe_for_endpoint_family_and_parses_external_interface() {
+        let ipv4_probe = LinuxExternalRouteProbe::new(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)),
+            51_820,
+        ));
+        assert_eq!(ipv4_probe.command().args, ["route", "get", "203.0.113.10"]);
+        assert_eq!(
+            LinuxExternalRouteProbe::parse_interface(
+                "203.0.113.10 via 192.0.2.1 dev eth0 src 192.0.2.2"
+            ),
+            Ok("eth0".to_owned())
+        );
+
+        let ipv6_probe = LinuxExternalRouteProbe::new(SocketAddr::new(
+            IpAddr::V6("2001:db8::10".parse().unwrap()),
+            51_820,
+        ));
+        assert_eq!(
+            ipv6_probe.command().args,
+            ["-6", "route", "get", "2001:db8::10"]
+        );
+    }
+
+    #[test]
+    fn rejects_route_probe_output_without_a_safe_interface() {
+        assert_eq!(
+            LinuxExternalRouteProbe::parse_interface("unreachable 203.0.113.10"),
+            Err(NetworkConfigError::InvalidRouteProbeOutput)
+        );
+        assert_eq!(
+            LinuxExternalRouteProbe::parse_interface("203.0.113.10 dev bad/iface"),
+            Err(NetworkConfigError::InvalidRouteProbeOutput)
         );
     }
 
