@@ -50,6 +50,9 @@ func TestTunnelCoreBinaryManagementContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
+		if process == nil {
+			return
+		}
 		if stopErr := process.Stop(); stopErr != nil && !errors.Is(stopErr, os.ErrProcessDone) {
 			t.Errorf("stop Tunnel Core: %v", stopErr)
 		}
