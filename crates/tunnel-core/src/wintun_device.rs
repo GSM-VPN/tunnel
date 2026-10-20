@@ -124,7 +124,12 @@ impl TunnelDevice for WintunDevice {
         };
         session.shutdown().map_err(map_error)?;
         drop(session);
-        self.adapter.take();
+        let Some(adapter) = self.adapter.take() else {
+            return Ok(());
+        };
+        let adapter =
+            Arc::try_unwrap(adapter).map_err(|_| DeviceError::Io(std::io::ErrorKind::Other))?;
+        adapter.delete().map_err(map_error)?;
         Ok(())
     }
 }
