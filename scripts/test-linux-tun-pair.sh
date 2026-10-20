@@ -24,6 +24,8 @@ if [[ "${GSM_TUN_NAMESPACE:-0}" != "1" ]]; then
 fi
 
 ip link set lo up
+sysctl -q -w net.ipv4.conf.all.rp_filter=0
+sysctl -q -w net.ipv4.conf.default.rp_filter=0
 work_dir=$(mktemp -d)
 output_file="$work_dir/helper.log"
 stop_file="$work_dir/stop"
