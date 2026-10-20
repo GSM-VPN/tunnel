@@ -1291,25 +1291,25 @@ Tunnel Engine은 다음 상태를 제공해야 한다.
 
 ### 최소 기능 MVP
 
-- [ ] Linux TUN 간 양방향 IP 패킷 전달
-- [ ] UDP 기반 터널 전송
+- [x] Linux TUN 간 양방향 IP 패킷 전달
+- [x] UDP 기반 터널 전송
 - [ ] VPN Server의 IP Forwarding과 NAT를 통한 실제 인터넷 접속
-- [ ] 기본적인 패킷 검증과 오류 처리
+- [x] 기본적인 패킷 검증과 오류 처리
 
 ### 보안 기능 완료
 
-- [ ] 인증된 핸드셰이크
-- [ ] 서버·클라이언트 신원 검증
-- [ ] AEAD 암호화
-- [ ] 송수신 키 분리
-- [ ] Replay 방어
-- [ ] 세션 수명주기 관리
-- [ ] 키 갱신
-- [ ] Keepalive와 재연결
+- [x] 인증된 핸드셰이크
+- [x] 서버·클라이언트 신원 검증
+- [x] AEAD 암호화
+- [x] 송수신 키 분리
+- [x] Replay 방어
+- [x] 세션 수명주기 관리
+- [x] 키 갱신
+- [x] Keepalive와 재연결
 
 ### 서비스 통합 완료
 
-- [ ] Go Controller와 Rust Core IPC
+- [x] Go Controller와 Rust Core IPC
 - [ ] 기존 Gateway 인증 흐름 연동
 - [ ] 기존 VPN Server 연동
 - [ ] Peer 등록·철회
