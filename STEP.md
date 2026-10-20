@@ -968,7 +968,7 @@ DISCONNECTED
 - [ ] 패킷 쓰기
 - [ ] MTU 설정
 - [ ] 권한 오류 처리
-- [ ] 공통 Device 인터페이스 적용
+- [x] 공통 Device 인터페이스 적용
 
 ### 11.2. Windows 네트워크 설정
 

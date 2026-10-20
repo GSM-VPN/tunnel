@@ -348,9 +348,9 @@ func (controller *CoreController) run(ctx context.Context) {
 	}
 	state := controller.state
 	logger := controller.logger
+	logCoreEvent(logger, "core_state_changed", "state", stateName(state), "failure", result != nil && !errors.Is(result, context.Canceled))
 	close(controller.done)
 	controller.mu.Unlock()
-	logCoreEvent(logger, "core_state_changed", "state", stateName(state), "failure", result != nil && !errors.Is(result, context.Canceled))
 }
 
 func stateName(state CoreState) string {
