@@ -14,15 +14,56 @@ Measure:
 - fairness across the target 216 concurrent sessions.
 
 Use the existing unit tests for deterministic correctness, then add Linux
-network-namespace and benchmark jobs before comparing against WireGuard.
+network-namespace and benchmark jobs before comparing against WireGuard. The
+Rust benchmark targets below cover reusable core-path signals; they do not
+replace an end-to-end network measurement.
 
-The repository currently includes a reproducible codec-only benchmark:
+## Reproducible core-path benchmarks
+
+Run all targets from the repository root:
 
 ```bash
-cargo bench --package tunnel-core --bench codec
+cargo bench --package tunnel-core --benches
 ```
 
-It measures 100,000 encode/decode round trips for a 512-byte payload and
-prints elapsed nanoseconds and processed bytes. This is a codec regression
-signal, not an end-to-end VPN throughput result; record the commit and host
-details before comparing runs.
+The targets use fixed inputs and print machine-readable key/value fields:
+
+| Target | Scope | Fixed workload |
+| --- | --- | --- |
+| `codec` | encode/decode round trip | 100,000 packets with a 512-byte payload |
+| `crypto` | ChaCha20-Poly1305 seal/open round trip | 100,000 packets at 64, 512, and 1,024-byte payloads |
+| `session` | session registry and fair byte limiter | 216 sessions, repeated 10,000 times |
+
+Each output includes elapsed nanoseconds. The crypto target reports encrypted
+bytes, while the session target reports the number of admitted operations.
+These are regression signals for the Rust core and must not be presented as
+VPN throughput, packet-per-second capacity, or security evidence.
+
+## Result record
+
+Copy the command, commit, host, and network conditions into the result record
+before comparing runs:
+
+```text
+date_utc:
+commit:
+os_kernel:
+cpu_memory:
+rustc_cargo:
+target_profile: bench
+server:
+client:
+mtu:
+bandwidth:
+concurrent_sessions:
+traffic_pattern:
+repetitions:
+command: cargo bench --package tunnel-core --benches
+output:
+interpretation:
+```
+
+The core benchmarks can be run on any host, but the server/client/MTU/
+bandwidth fields are required for a future end-to-end result. Do not fill them
+with defaults or infer network performance from a codec, crypto, or in-memory
+session result.

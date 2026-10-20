@@ -1188,7 +1188,7 @@ WireGuard와의 성능 비교는 이 프로젝트의 필수 요구사항에서 �
 
 ### 14.4. 산출물
 
-- [ ] `docs/performance.md` 작성
+- [x] `docs/performance.md` 작성
 - [ ] GSM Tunnel 자체 성능 결과 작성
 - [ ] 병목 구간 분석
 - [ ] 최적화 전후 수치 기록

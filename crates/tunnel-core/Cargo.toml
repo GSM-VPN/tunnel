@@ -34,3 +34,11 @@ libc = "0.2"
 name = "codec"
 harness = false
 
+[[bench]]
+name = "crypto"
+harness = false
+
+[[bench]]
+name = "session"
+harness = false
+
