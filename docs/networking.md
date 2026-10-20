@@ -134,6 +134,15 @@ without changing order or falling back across address families accidentally.
 The existing `LinuxDnsPlan` remains a `resolvectl` command planner, so external
 DNS-leak tests and OS-specific resolver behavior must be run by each platform
 adapter before those deployment checkboxes are considered complete.
+
+The session policy treats authenticated keepalives as the transport adapter's
+NAT-mapping refresh signal. `SessionPolicy::keepalives_per` provides a bounded
+estimate for a battery or radio budget, while the adapter remains responsible
+for suppressing work when the platform is suspended. A reconnect can use
+`ReconnectDataPolicy::Drop` (the default) or a bounded packet/byte budget; the
+state machine never stores packet contents. Server shutdown and client network
+changes remain explicit lifecycle events, so a platform can re-establish the
+endpoint and authenticated session without silently forwarding stale data.
 It is still a command planner; applying the commands and restoring a route
 snapshot belong to the privileged platform adapter.
 
