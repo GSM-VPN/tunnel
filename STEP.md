@@ -685,8 +685,8 @@ Device Interface
 - [x] Linux IP Forwarding 활성화
 - [x] 서버 TUN 주소 설정
 - [x] VPN 내부 IP 대역 설정
-- [ ] 외부 NIC 확인
-- [ ] Routing Table 구성
+- [x] 외부 NIC 확인
+- [x] Routing Table 구성
 - [x] nftables 규칙 구성
 - [x] SNAT/MASQUERADE 구성
 - [x] 클라이언트별 내부 IP 검증
