@@ -19,6 +19,9 @@ general-purpose VPN before independent security review.
 - Packets from an older key generation are rejected immediately after the
   switch; the current boundary intentionally provides no old-key grace
   window.
+- The server-side packet policy can require an authenticated session's source
+  to equal its approved virtual IPv4/IPv6 address; this is separate from the
+  broader tunnel-range check and rejects cross-peer address claims.
 - Sequence counters use checked arithmetic; overflow is a terminal error rather
   than a nonce-reuse-prone saturation.
 - Management messages contain opaque payloads and no key fields.
