@@ -8,6 +8,7 @@ target/
 # Local development
 .env
 .DS_Store
+benchmark-results/*.md
 
 # Agent
 .codex

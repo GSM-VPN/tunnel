@@ -1,0 +1,25 @@
+[Unit]
+Description=GSM Tunnel Rust Core
+Documentation=https://github.com/GSM-VPN/tunnel/blob/develop/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gsm-tunnel
+Group=gsm-tunnel
+EnvironmentFile=/etc/gsm-tunnel/gsm-tunnel.env
+ExecStart=/usr/local/libexec/gsm-tunnel-core
+RuntimeDirectory=gsm-tunnel
+RuntimeDirectoryMode=0750
+Restart=on-failure
+RestartSec=2s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run/gsm-tunnel
+
+[Install]
+WantedBy=multi-user.target
