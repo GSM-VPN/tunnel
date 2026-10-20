@@ -274,7 +274,7 @@ Tunnel Handshake / Encrypted Session
 - [x] IPv6 정식 터널링은 초기 범위에 포함
 - [x] 자체 NAT 엔진은 구현하지 않음
 - [x] 자체 패킷 단편화·재조립은 초기 범위에서 제외
-- [ ] macOS 네트워크 인터페이스는 Windows 이후 검토
+- [x] macOS 네트워크 인터페이스는 Windows 이후 검토
 - [ ] 공용 사용자 대상 배포는 독립 보안 검토 전 금지
 
 
@@ -1323,7 +1323,7 @@ Tunnel Engine은 다음 상태를 제공해야 한다.
 - [ ] Windows 라우팅 설정
 - [ ] Windows DNS 설정
 - [ ] 네트워크 설정 복원
-- [ ] macOS 지원 범위 검토
+- [x] macOS 지원 범위 검토
 
 ### 검증 완료
 
