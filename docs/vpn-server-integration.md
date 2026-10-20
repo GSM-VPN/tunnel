@@ -51,6 +51,12 @@ CoreController desired state
 모두 승인되지 않은 Peer의 새 세션을 즉시 거부하고, Core 재시작 시 복원하지
 않는다. 새 공개키는 새 승인 절차를 거쳐야 한다.
 
+서비스 상태 조회는 `VPNServerAuthorization::ConnectionStatus` 경계를 사용한다.
+Controller는 먼저 Peer 승인과 Core 실행 상태를 확인하고, Core의 비밀 없는
+`SessionStatus`를 조회한 뒤 응답의 Peer ID가 요청한 Peer와 일치하는지 다시
+검증한다. 따라서 세션 ID를 알고 있더라도 다른 사용자의 연결 상태를 조회할
+수 없다.
+
 ## 서명 경계
 
 `GatewayAuthenticator`는 비어 있지 않은 secret만 허용하고 HMAC 결과를

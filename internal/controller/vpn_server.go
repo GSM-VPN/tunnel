@@ -15,11 +15,12 @@ import (
 )
 
 var (
-	ErrGatewaySecretRequired   = errors.New("gateway shared secret is required")
-	ErrGatewaySignatureInvalid = errors.New("gateway signature is invalid")
-	ErrApprovalInvalid         = errors.New("VPN approval is invalid")
-	ErrApprovalServerMismatch  = errors.New("VPN approval belongs to another server")
-	ErrPeerNotApproved         = errors.New("peer is not approved")
+	ErrGatewaySecretRequired    = errors.New("gateway shared secret is required")
+	ErrGatewaySignatureInvalid  = errors.New("gateway signature is invalid")
+	ErrApprovalInvalid          = errors.New("VPN approval is invalid")
+	ErrApprovalServerMismatch   = errors.New("VPN approval belongs to another server")
+	ErrPeerNotApproved          = errors.New("peer is not approved")
+	ErrSessionOwnershipMismatch = errors.New("session belongs to another peer")
 )
 
 // GatewayAuthenticator verifies the service-plane HMAC used by vpn-server.
@@ -174,6 +175,36 @@ func (authorization VPNServerAuthorization) CreateSession(ctx context.Context, p
 	socketPath := authorization.Controller.config.SocketPath
 	authorization.Controller.mu.Unlock()
 	return (Client{SocketPath: socketPath}).CreateSession(requestID, protocol.SessionRequest{SessionID: sessionID, PeerID: peerID})
+}
+
+// ConnectionStatus returns a non-secret session status for an approved peer.
+// The Core response is checked again so a caller cannot use a known session ID
+// to observe another peer's connection state.
+func (authorization VPNServerAuthorization) ConnectionStatus(ctx context.Context, peerID uint64, sessionID uint32, requestID uint64) (protocol.SessionStatus, error) {
+	if authorization.Controller == nil {
+		return protocol.SessionStatus{}, fmt.Errorf("%w: controller is required", ErrApprovalInvalid)
+	}
+	if err := ctx.Err(); err != nil {
+		return protocol.SessionStatus{}, err
+	}
+	if _, ok := authorization.Controller.DesiredState().peers[peerID]; !ok {
+		return protocol.SessionStatus{}, ErrPeerNotApproved
+	}
+	status := authorization.Controller.Status()
+	if status.State != CoreRunning {
+		return protocol.SessionStatus{}, ErrCoreNotStarted
+	}
+	authorization.Controller.mu.Lock()
+	socketPath := authorization.Controller.config.SocketPath
+	authorization.Controller.mu.Unlock()
+	result, err := (Client{SocketPath: socketPath}).GetSession(requestID, sessionID)
+	if err != nil {
+		return protocol.SessionStatus{}, err
+	}
+	if result.PeerID != peerID {
+		return protocol.SessionStatus{}, ErrSessionOwnershipMismatch
+	}
+	return result, nil
 }
 
 func isZeroKey(key [32]byte) bool {
