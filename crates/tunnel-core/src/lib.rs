@@ -70,6 +70,7 @@ pub use network::{
     LinuxClientNetworkPlan, LinuxClientRoutePlan, LinuxExternalRouteProbe, LinuxKillSwitchPlan,
     LinuxNetworkPlan, LinuxRouteSnapshot, LinuxRouteState, MtuBudget, NetworkCommand,
     NetworkConfigError, PathMtuObservation, TunnelNetworkConfig, WindowsClientNetworkPlan,
+    WindowsKillSwitchPlan,
 };
 pub use noise::{NOISE_IK_PARAMS, NoiseHandshake, NoiseHandshakeError, NoiseTransport};
 pub use peer::{PeerAuthorization, PeerRegistry, PeerRegistryError, PeerSummary};

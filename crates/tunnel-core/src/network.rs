@@ -123,6 +123,7 @@ pub enum NetworkConfigError {
     InvalidInterfaceIndex,
     EmptyDnsServers,
     InvalidDnsAddress,
+    InvalidFirewallRuleGroup,
 }
 
 /// One argv-safe command emitted by the privileged Linux network adapter.
@@ -631,6 +632,136 @@ impl WindowsClientNetworkPlan {
             commands.push(NetworkCommand::new("netsh", command));
         }
         commands
+    }
+}
+
+/// Windows Defender Firewall policy that keeps tunnel traffic on the VPN.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WindowsKillSwitchPlan {
+    pub rule_group: String,
+    pub tunnel_interface: String,
+    pub physical_interface: String,
+    pub endpoint: SocketAddr,
+}
+
+impl WindowsKillSwitchPlan {
+    /// Creates a Windows firewall transition plan without changing host state.
+    ///
+    /// The plan uses a dedicated rule group so the privileged adapter can
+    /// remove only rules created for this tunnel.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when an interface, rule group, or endpoint is invalid.
+    pub fn new(
+        rule_group: impl Into<String>,
+        tunnel_interface: impl Into<String>,
+        physical_interface: impl Into<String>,
+        endpoint: SocketAddr,
+    ) -> Result<Self, NetworkConfigError> {
+        let rule_group = rule_group.into();
+        let tunnel_interface = tunnel_interface.into();
+        let physical_interface = physical_interface.into();
+        if !valid_windows_interface_name(&tunnel_interface)
+            || !valid_windows_interface_name(&physical_interface)
+        {
+            return Err(NetworkConfigError::InvalidInterfaceName);
+        }
+        if rule_group.is_empty()
+            || rule_group.len() > 255
+            || rule_group.bytes().any(|byte| byte.is_ascii_control())
+            || rule_group.contains('"')
+        {
+            return Err(NetworkConfigError::InvalidFirewallRuleGroup);
+        }
+        if endpoint.port() == 0 {
+            return Err(NetworkConfigError::InvalidUdpPort);
+        }
+        Ok(Self {
+            rule_group,
+            tunnel_interface,
+            physical_interface,
+            endpoint,
+        })
+    }
+
+    /// Builds a default-block policy with tunnel and endpoint exceptions.
+    #[must_use]
+    pub fn apply_commands(&self) -> Vec<NetworkCommand> {
+        let group = self.rule_group.clone();
+        let mut commands = vec![NetworkCommand::new(
+            "netsh",
+            [
+                "advfirewall".to_owned(),
+                "set".to_owned(),
+                "allprofiles".to_owned(),
+                "firewallpolicy".to_owned(),
+                "blockinbound,blockoutbound".to_owned(),
+            ],
+        )];
+        commands.push(Self::allow_rule(
+            &format!("{group} tunnel"),
+            vec![
+                "interfaceType=any".to_owned(),
+                format!("interface={}", self.tunnel_interface),
+            ],
+        ));
+        commands.push(Self::allow_rule(
+            &format!("{group} endpoint"),
+            vec![
+                "protocol=UDP".to_owned(),
+                format!("remoteip={}", self.endpoint.ip()),
+                format!("remoteport={}", self.endpoint.port()),
+                format!("interface={}", self.physical_interface),
+            ],
+        ));
+        commands
+    }
+
+    /// Builds commands that remove the dedicated rules and restore outbound access.
+    #[must_use]
+    pub fn rollback_commands(&self) -> Vec<NetworkCommand> {
+        let group = windows_interface_arg(&self.rule_group);
+        vec![
+            NetworkCommand::new(
+                "netsh",
+                [
+                    "advfirewall".to_owned(),
+                    "firewall".to_owned(),
+                    "delete".to_owned(),
+                    "rule".to_owned(),
+                    group,
+                ],
+            ),
+            NetworkCommand::new(
+                "netsh",
+                [
+                    "advfirewall".to_owned(),
+                    "set".to_owned(),
+                    "allprofiles".to_owned(),
+                    "firewallpolicy".to_owned(),
+                    "blockinbound,allowoutbound".to_owned(),
+                ],
+            ),
+        ]
+    }
+
+    fn allow_rule(
+        name: &str,
+        options: impl IntoIterator<Item = impl Into<String>>,
+    ) -> NetworkCommand {
+        let mut args = vec![
+            "advfirewall".to_owned(),
+            "firewall".to_owned(),
+            "add".to_owned(),
+            "rule".to_owned(),
+            format!("name=\"{name}\""),
+            "dir=out".to_owned(),
+            "action=allow".to_owned(),
+            "profile=any".to_owned(),
+        ];
+        args.extend(options.into_iter().map(Into::into));
+        NetworkCommand::new("netsh", args)
     }
 }
 
@@ -1302,7 +1433,7 @@ mod tests {
     use super::{
         LinuxClientNetworkPlan, LinuxClientRoutePlan, LinuxExternalRouteProbe, LinuxKillSwitchPlan,
         LinuxNetworkPlan, LinuxRouteSnapshot, LinuxRouteState, MtuBudget, NetworkConfigError,
-        PathMtuObservation, TunnelNetworkConfig, WindowsClientNetworkPlan,
+        PathMtuObservation, TunnelNetworkConfig, WindowsClientNetworkPlan, WindowsKillSwitchPlan,
     };
 
     fn valid_ipv4_packet(payload: &[u8]) -> Vec<u8> {
@@ -1434,6 +1565,86 @@ mod tests {
             vec![IpAddr::V4(Ipv4Addr::UNSPECIFIED)],
         );
         assert_eq!(result, Err(NetworkConfigError::InvalidDnsAddress));
+    }
+
+    #[test]
+    fn builds_windows_kill_switch_rules_and_rollback() {
+        let plan = WindowsKillSwitchPlan::new(
+            "GSM Tunnel Kill Switch",
+            "GSM Tunnel",
+            "Ethernet",
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+        )
+        .unwrap();
+        let apply = plan.apply_commands();
+        assert_eq!(apply.len(), 3);
+        assert!(
+            apply[0]
+                .args
+                .iter()
+                .any(|argument| { argument == "blockinbound,blockoutbound" })
+        );
+        assert!(
+            apply[1]
+                .args
+                .iter()
+                .any(|argument| { argument == "name=\"GSM Tunnel Kill Switch tunnel\"" })
+        );
+        assert!(
+            apply[1]
+                .args
+                .iter()
+                .any(|argument| { argument == "interface=GSM Tunnel" })
+        );
+        assert!(
+            apply[2]
+                .args
+                .iter()
+                .any(|argument| { argument == "remoteip=203.0.113.10" })
+        );
+        assert!(
+            apply[2]
+                .args
+                .iter()
+                .any(|argument| { argument == "remoteport=51820" })
+        );
+
+        let rollback = plan.rollback_commands();
+        assert_eq!(rollback.len(), 2);
+        assert!(
+            rollback[0]
+                .args
+                .iter()
+                .any(|argument| { argument == "name=\"GSM Tunnel Kill Switch\"" })
+        );
+        assert!(
+            rollback[1]
+                .args
+                .iter()
+                .any(|argument| { argument == "blockinbound,allowoutbound" })
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_windows_kill_switch_values() {
+        let endpoint = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 51_820);
+        assert_eq!(
+            WindowsKillSwitchPlan::new("bad\"group", "GSM Tunnel", "Ethernet", endpoint),
+            Err(NetworkConfigError::InvalidFirewallRuleGroup)
+        );
+        assert_eq!(
+            WindowsKillSwitchPlan::new("group", "GSM\0Tunnel", "Ethernet", endpoint),
+            Err(NetworkConfigError::InvalidInterfaceName)
+        );
+        assert_eq!(
+            WindowsKillSwitchPlan::new(
+                "group",
+                "GSM Tunnel",
+                "Ethernet",
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0)
+            ),
+            Err(NetworkConfigError::InvalidUdpPort)
+        );
     }
 
     #[test]
