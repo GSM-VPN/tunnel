@@ -2,7 +2,7 @@
 
 #[cfg(target_os = "linux")]
 use std::{
-    io,
+    io::{self, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::Path,
     thread,
@@ -61,10 +61,26 @@ fn main() -> Result<(), String> {
     let mut sent = 0;
     let mut received = 0;
     for _ in 0..20_000 {
-        sent += usize::from(pump_send(&mut client)?);
-        sent += usize::from(pump_send(&mut server)?);
-        received += usize::from(pump_receive(&mut client)?);
-        received += usize::from(pump_receive(&mut server)?);
+        if pump_send(&mut client)? {
+            sent += 1;
+            println!("client_sent");
+            io::stdout().flush().map_err(|error| error.to_string())?;
+        }
+        if pump_send(&mut server)? {
+            sent += 1;
+            println!("server_sent");
+            io::stdout().flush().map_err(|error| error.to_string())?;
+        }
+        if pump_receive(&mut client)? {
+            received += 1;
+            println!("client_received");
+            io::stdout().flush().map_err(|error| error.to_string())?;
+        }
+        if pump_receive(&mut server)? {
+            received += 1;
+            println!("server_received");
+            io::stdout().flush().map_err(|error| error.to_string())?;
+        }
         if Path::new(&stop_file).exists() {
             break;
         }
