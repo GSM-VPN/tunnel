@@ -51,7 +51,9 @@ func TestTunnelCoreBinaryManagementContract(t *testing.T) {
 		if stopErr := process.Stop(); stopErr != nil && !errors.Is(stopErr, os.ErrProcessDone) {
 			t.Errorf("stop Tunnel Core: %v", stopErr)
 		}
-		_, _ = process.Wait(), process
+		if waitErr := process.Wait(); waitErr != nil {
+			t.Logf("Tunnel Core exited after test cleanup: %v", waitErr)
+		}
 	})
 
 	client := Client{SocketPath: socketPath, Timeout: time.Second}
