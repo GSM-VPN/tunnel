@@ -42,8 +42,9 @@ pub use encrypted_engine::{EncryptedTunnel, EncryptedTunnelError};
 pub use engine::{PlainTunnel, TunnelError};
 pub use identity::{IdentityConfigError, ServerIdentity};
 pub use ip_packet::{
-    InnerIpPacketError, InnerIpPacketInfo, InnerIpVersion, ipv4_header_checksum,
-    is_tunnel_ipv4_address, validate_inner_ip_packet, validate_inner_ip_packet_from_tunnel,
+    InnerIpPacketError, InnerIpPacketInfo, InnerIpVersion, PeerSourcePolicy, ipv4_header_checksum,
+    is_tunnel_ipv4_address, validate_inner_ip_packet, validate_inner_ip_packet_from_peer,
+    validate_inner_ip_packet_from_tunnel,
 };
 pub use key_rotation::{KeyRotationPolicy, RotationReason};
 #[cfg(target_os = "linux")]
