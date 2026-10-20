@@ -130,7 +130,9 @@ jobs:
           toolchain: stable
 
       - name: Run Linux TUN smoke test
-        run: sudo env "PATH=$PATH" ./scripts/test-linux-tun.sh
+        run: |
+          cargo build -p tunnel-core --example linux-tun-smoke
+          sudo env LINUX_TUN_BINARY="$PWD/target/debug/examples/linux-tun-smoke" ./scripts/test-linux-tun.sh
 
   dependency-audit:
     name: Dependency audit

@@ -13,7 +13,11 @@ fi
 
 command -v ip >/dev/null
 command -v ping >/dev/null
-cargo build -p tunnel-core --example linux-tun-smoke
+
+helper_binary="${LINUX_TUN_BINARY:-target/debug/examples/linux-tun-smoke}"
+if [[ -z "${LINUX_TUN_BINARY:-}" ]]; then
+  cargo build -p tunnel-core --example linux-tun-smoke
+fi
 
 if [[ "${GSM_TUN_NAMESPACE:-0}" != "1" ]]; then
   exec env GSM_TUN_NAMESPACE=1 unshare --net --mount-proc "$0" "$@"
@@ -35,7 +39,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-target/debug/examples/linux-tun-smoke >"$output_file" 2>&1 &
+"$helper_binary" >"$output_file" 2>&1 &
 helper_pid=$!
 
 for _ in $(seq 1 50); do
