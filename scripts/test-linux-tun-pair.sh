@@ -57,8 +57,10 @@ done
 grep -q '^ready client=gsmclient0 server=gsmserver0$' "$output_file"
 ip link set gsmclient0 up
 ip link set gsmserver0 up
-ip addr add 10.82.0.1/24 dev gsmclient0
-ip addr add 10.82.0.2/24 dev gsmserver0
+ip addr add 10.82.0.1/32 dev gsmclient0
+ip addr add 10.82.0.2/32 dev gsmserver0
+ip route add 10.82.0.2/32 dev gsmclient0
+ip route add 10.82.0.1/32 dev gsmserver0
 
 if ! ping -c 2 -W 1 -I gsmclient0 10.82.0.2 >/dev/null 2>&1; then
   cat "$output_file" >&2
