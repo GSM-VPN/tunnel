@@ -8,6 +8,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/GSM-VPN/tunnel/internal/protocol"
 )
 
 func TestGatewayAuthenticatorMatchesVpnServerSignatureFormat(t *testing.T) {
@@ -96,6 +98,21 @@ func TestAuthorizationApprovalUpdatesDesiredStateWithoutExposingSecrets(t *testi
 	}
 	if _, err := service.CreateSession(context.Background(), approval.PeerID, 2, 6); !errors.Is(err, ErrPeerNotApproved) {
 		t.Fatalf("purged key remained connectable: %v", err)
+	}
+}
+
+func TestConnectionStatusRequiresAnApprovedPeerAndRunningCore(t *testing.T) {
+	controller := newCoreController(
+		CoreCommand{SocketPath: "/tmp/core.sock"}, DefaultRestartPolicy(),
+		func(context.Context, CoreCommand) (CoreProcess, error) { return nil, nil },
+	)
+	service := VPNServerAuthorization{Controller: controller}
+	if _, err := service.ConnectionStatus(context.Background(), 7, 1, 1); !errors.Is(err, ErrPeerNotApproved) {
+		t.Fatalf("unexpected unapproved status error: %v", err)
+	}
+	controller.ApprovePeer(protocol.PeerRegistration{PeerID: 7, UserID: "user-7"})
+	if _, err := service.ConnectionStatus(context.Background(), 7, 1, 1); !errors.Is(err, ErrCoreNotStarted) {
+		t.Fatalf("unexpected stopped-core status error: %v", err)
 	}
 }
 
