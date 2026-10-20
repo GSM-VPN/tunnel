@@ -7,8 +7,8 @@ TUN·UDP·NAT·외부 네트워크를 포함한 VPN 처리량을 의미하지 �
 ## 실행 조건
 
 ```text
-date_utc: 2026-10-20T08:49:02Z
-commit: 2a705a7228de90bd83de2a175e09d530e22ff3f3
+date_utc: 2026-10-20T16:31:11Z
+commit: f6fd5498135f662643549e5b0e6f8658dd2505a2
 os_kernel: Darwin 25.6.0 (RELEASE_ARM64_T6030)
 cpu_memory: Apple Mac15,7; 12 logical CPUs; 36 GiB memory
 rustc_cargo: rustc 1.99.0; cargo 1.99.0
@@ -27,12 +27,12 @@ command: cargo bench --package tunnel-core --benches
 
 | 대상 | 입력 및 반복 | 결과 |
 | --- | --- | --- |
-| codec roundtrip | 512-byte payload, 100,000회 | `bytes=53600000`, `elapsed_ns=26963666` |
-| crypto roundtrip | 64-byte payload, 100,000회 | `encrypted_bytes=8000000`, `elapsed_ns=144560417` |
-| crypto roundtrip | 512-byte payload, 100,000회 | `encrypted_bytes=52800000`, `elapsed_ns=394671333` |
-| crypto roundtrip | 1,024-byte payload, 100,000회 | `encrypted_bytes=104000000`, `elapsed_ns=804445958` |
-| session table fill/remove | 216개 session, 10,000회 | `removed_sum=234360000`, `elapsed_ns=66462125` |
-| fair rate limiter | 216개 session, 1,024-byte payload, 10,000회 | `admitted=2160000`, `elapsed_ns=97318083` |
+| codec roundtrip | 512-byte payload, 100,000회 | `bytes=53600000`, `elapsed_ns=25197292` |
+| crypto roundtrip | 64-byte payload, 100,000회 | `encrypted_bytes=8000000`, `elapsed_ns=137202375` |
+| crypto roundtrip | 512-byte payload, 100,000회 | `encrypted_bytes=52800000`, `elapsed_ns=351159333` |
+| crypto roundtrip | 1,024-byte payload, 100,000회 | `encrypted_bytes=104000000`, `elapsed_ns=609591959` |
+| session table fill/remove | 216개 session, 10,000회 | `removed_sum=234360000`, `elapsed_ns=77258292` |
+| fair rate limiter | 216개 session, 1,024-byte payload, 10,000회 | `admitted=2160000`, `elapsed_ns=95388416` |
 
 ## 해석 범위
 
