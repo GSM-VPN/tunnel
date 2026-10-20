@@ -24,6 +24,7 @@
 | 지연·재정렬 | 결정론적 netem delay와 duplicate/reorder | 인증된 window 안의 재정렬 packet 허용, replay packet 거부 | sequence 결과와 replay counter |
 | Interface 변경 | client endpoint/interface 교체 | 인증된 검증 후에만 endpoint 재바인딩 | route snapshot, endpoint table, handshake log |
 | DNS 장애 | 테스트 resolver 차단 | DNS 실패를 제한하고 route cleanup 수행 | resolver 명령, 오류 분류, cleanup 출력 |
+| Controller/Core process restart | Rust Core binary 종료 후 동일 IPC socket으로 재기동 | 새 management socket에서 Initialize·Start·Health 조회 성공 | `TestTunnelCoreBinaryManagementContract`, process lifecycle log |
 
 ## 실행 순서
 
