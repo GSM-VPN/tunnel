@@ -114,6 +114,24 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --all-targets --all-features
 
+  linux-tun:
+    name: Linux TUN smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install network tools
+        run: sudo apt-get update && sudo apt-get install --yes iproute2 iputils-ping util-linux
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Run Linux TUN smoke test
+        run: sudo ./scripts/test-linux-tun.sh
+
   dependency-audit:
     name: Dependency audit
     runs-on: ubuntu-latest
