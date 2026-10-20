@@ -101,6 +101,43 @@ func TestAuthorizationApprovalUpdatesDesiredStateWithoutExposingSecrets(t *testi
 	}
 }
 
+func TestAuthorizationReceivesGatewayApprovalResultAsOneBoundary(t *testing.T) {
+	controller := newCoreController(
+		CoreCommand{SocketPath: "/tmp/core.sock"}, DefaultRestartPolicy(),
+		func(context.Context, CoreCommand) (CoreProcess, error) { return nil, nil },
+	)
+	authenticator, err := NewGatewayAuthenticator("shared-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := VPNServerAuthorization{
+		Controller: controller, Authenticator: authenticator,
+		ExpectedServerID: "server-1", Now: func() time.Time { return time.Unix(1_700_000_000, 0) },
+	}
+	parts := []string{"POST", "/peers", "device-7", "1700000000"}
+	result := GatewayApprovalResult{
+		SignatureParts: parts,
+		Signature:      signGatewayParts("shared-secret", parts),
+		Approval:       validApproval(time.Unix(1_700_000_000, 0)),
+		RequestID:      11,
+	}
+	if err := service.ReceiveApproval(context.Background(), result); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := controller.DesiredState().peers[result.Approval.PeerID]; !ok {
+		t.Fatal("Gateway approval result was not applied")
+	}
+
+	result.Signature = result.Signature + "tampered"
+	result.Approval.PeerID++
+	if err := service.ReceiveApproval(context.Background(), result); !errors.Is(err, ErrGatewaySignatureInvalid) {
+		t.Fatalf("unexpected tampered approval result: %v", err)
+	}
+	if _, ok := controller.DesiredState().peers[result.Approval.PeerID]; ok {
+		t.Fatal("tampered Gateway approval changed desired state")
+	}
+}
+
 func TestConnectionStatusRequiresAnApprovedPeerAndRunningCore(t *testing.T) {
 	controller := newCoreController(
 		CoreCommand{SocketPath: "/tmp/core.sock"}, DefaultRestartPolicy(),

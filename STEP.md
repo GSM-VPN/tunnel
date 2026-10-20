@@ -924,7 +924,7 @@ DISCONNECTED
 
 ### 10.2. 연동 기능
 
-- [ ] Gateway 인증 결과 수신
+- [x] Gateway 인증 결과 수신
 - [x] VPN Server 승인 정보 검증
 - [x] 클라이언트 공개키 등록
 - [x] 허용된 가상 IP 등록
