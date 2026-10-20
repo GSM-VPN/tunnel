@@ -1113,9 +1113,9 @@ server namespace
 simulated internet
 ```
 
-- [ ] Client TUN 양방향 전달
-- [ ] Server TUN 양방향 전달
-- [ ] UDP 통신
+- [x] Client TUN 양방향 전달
+- [x] Server TUN 양방향 전달
+- [x] UDP 통신
 - [ ] IP Forwarding
 - [ ] NAT
 - [ ] 외부 인터넷 접근
