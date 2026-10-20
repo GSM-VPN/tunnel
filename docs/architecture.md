@@ -34,3 +34,7 @@ backoff. Authentication failure and permission revocation enter the closing
 path and do not retry automatically. CoreController exposes the child
 STARTING/RUNNING/STOPPING/STOPPED/UNHEALTHY state and stops retrying after the
 configured restart limit.
+
+Release evidence and the boundary between local verification and privileged
+environment checks are tracked in
+[`release-verification-matrix.md`](./release-verification-matrix.md).
