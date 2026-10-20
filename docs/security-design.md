@@ -38,6 +38,22 @@ Session keys and the server private key use `zeroize`-backed storage. The
 encrypted tunnel has a consuming close operation that closes its device and
 UDP transport before the cipher and counters are dropped.
 
+## Interoperability verification
+
+The AEAD primitive is regression-tested against the ChaCha20-Poly1305 example
+from [RFC 8439 Section 2.8.2](https://datatracker.ietf.org/doc/html/rfc8439#section-2.8.2).
+The test fixes the key, 96-bit nonce, AAD, plaintext, ciphertext, and tag, and
+checks both encryption and decryption. This validates the library primitive
+against an external known vector; it is not an independent security review.
+
+`SessionCipher` adds the project-specific boundary around that primitive. Its
+nonce input is derived from session ID, key generation, direction, and packet
+sequence, while the encoded tunnel header is authenticated as AAD. Regression
+tests assert that changing session, direction, or generation changes the
+ciphertext and that changing an authenticated header field is rejected.
+These tests do not replace replay, key-lifecycle, network-namespace, or
+independent review requirements.
+
 ## Operational boundary
 
 Management uses a bounded binary protocol over a Unix Domain Socket. Frames,
