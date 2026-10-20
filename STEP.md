@@ -977,6 +977,7 @@ DISCONNECTED
 - [ ] 기본 라우트 설정
 - [ ] VPN Endpoint 예외 경로
 - [ ] DNS 설정
+- [x] IPv6 주소·기본 라우트의 검증된 Windows 명령 계획 구현
 - [ ] IPv6 차단 또는 라우팅
 - [x] Wintun interface와 VPN Endpoint 예외를 포함한 Windows 방화벽 kill switch 명령 계획 구현
 - [ ] 방화벽 규칙

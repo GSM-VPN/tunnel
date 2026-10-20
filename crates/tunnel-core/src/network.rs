@@ -409,6 +409,7 @@ pub struct WindowsClientNetworkPlan {
     pub physical_interface_index: u32,
     pub tunnel_ipv4: Ipv4Addr,
     pub tunnel_prefix: u8,
+    pub tunnel_ipv6: Option<(Ipv6Addr, u8)>,
     pub tunnel_gateway: Ipv4Addr,
     pub endpoint: SocketAddr,
     pub physical_gateway: IpAddr,
@@ -430,6 +431,7 @@ impl WindowsClientNetworkPlan {
         physical_interface_index: u32,
         tunnel_ipv4: Ipv4Addr,
         tunnel_prefix: u8,
+        tunnel_ipv6: Option<(Ipv6Addr, u8)>,
         tunnel_gateway: Ipv4Addr,
         endpoint: SocketAddr,
         physical_gateway: IpAddr,
@@ -444,6 +446,9 @@ impl WindowsClientNetworkPlan {
         }
         if tunnel_prefix > 32 {
             return Err(NetworkConfigError::InvalidIpv4Prefix);
+        }
+        if tunnel_ipv6.is_some_and(|(_, prefix)| prefix > 128) {
+            return Err(NetworkConfigError::InvalidIpv6Prefix);
         }
         if endpoint.port() == 0 {
             return Err(NetworkConfigError::InvalidUdpPort);
@@ -466,6 +471,7 @@ impl WindowsClientNetworkPlan {
             physical_interface_index,
             tunnel_ipv4,
             tunnel_prefix,
+            tunnel_ipv6,
             tunnel_gateway,
             endpoint,
             physical_gateway,
@@ -492,6 +498,20 @@ impl WindowsClientNetworkPlan {
                 "1".to_owned(),
             ],
         )];
+        if let Some((address, prefix)) = self.tunnel_ipv6 {
+            commands.push(NetworkCommand::new(
+                "netsh",
+                [
+                    "interface".to_owned(),
+                    "ipv6".to_owned(),
+                    "set".to_owned(),
+                    "address".to_owned(),
+                    format!("interface={}", self.tunnel_interface_index),
+                    format!("address={address}/{prefix}"),
+                    "store=active".to_owned(),
+                ],
+            ));
+        }
         commands.push(self.endpoint_route_command("add"));
         commands.push(NetworkCommand::new(
             "route",
@@ -507,6 +527,21 @@ impl WindowsClientNetworkPlan {
                 "1".to_owned(),
             ],
         ));
+        if self.tunnel_ipv6.is_some() {
+            commands.push(NetworkCommand::new(
+                "netsh",
+                [
+                    "interface".to_owned(),
+                    "ipv6".to_owned(),
+                    "add".to_owned(),
+                    "route".to_owned(),
+                    "::/0".to_owned(),
+                    format!("interface={}", self.tunnel_interface_index),
+                    "nexthop=::".to_owned(),
+                    "metric=1".to_owned(),
+                ],
+            ));
+        }
         commands.extend(self.dns_commands(&interface, "set"));
         commands
     }
@@ -536,6 +571,30 @@ impl WindowsClientNetworkPlan {
                 "source=dhcp".to_owned(),
             ],
         ));
+        if let Some((address, _)) = self.tunnel_ipv6 {
+            commands.push(NetworkCommand::new(
+                "netsh",
+                [
+                    "interface".to_owned(),
+                    "ipv6".to_owned(),
+                    "delete".to_owned(),
+                    "route".to_owned(),
+                    "::/0".to_owned(),
+                    format!("interface={}", self.tunnel_interface_index),
+                ],
+            ));
+            commands.push(NetworkCommand::new(
+                "netsh",
+                [
+                    "interface".to_owned(),
+                    "ipv6".to_owned(),
+                    "delete".to_owned(),
+                    "address".to_owned(),
+                    format!("interface={}", self.tunnel_interface_index),
+                    format!("address={address}"),
+                ],
+            ));
+        }
         commands.extend(self.dns_commands(&interface, "set-dhcp"));
         commands
     }
@@ -1459,6 +1518,7 @@ mod tests {
             7,
             Ipv4Addr::new(10, 80, 0, 2),
             16,
+            None,
             Ipv4Addr::new(10, 80, 0, 1),
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
             IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
@@ -1506,6 +1566,38 @@ mod tests {
                 .count(),
             3
         );
+
+        let dual_stack = WindowsClientNetworkPlan::new(
+            "GSM Tunnel",
+            42,
+            7,
+            Ipv4Addr::new(10, 80, 0, 2),
+            16,
+            Some(("fd80:1234:5678::2".parse().unwrap(), 64)),
+            Ipv4Addr::new(10, 80, 0, 1),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+            IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
+            vec![IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))],
+        )
+        .unwrap();
+        let dual_apply = dual_stack.apply_commands();
+        assert!(dual_apply.iter().any(|command| {
+            command
+                .args
+                .iter()
+                .any(|argument| argument == "address=fd80:1234:5678::2/64")
+        }));
+        assert!(
+            dual_apply
+                .iter()
+                .any(|command| { command.args.iter().any(|argument| argument == "::/0") })
+        );
+        assert!(dual_stack.rollback_commands().iter().any(|command| {
+            command
+                .args
+                .iter()
+                .any(|argument| argument == "address=fd80:1234:5678::2")
+        }));
     }
 
     #[test]
@@ -1517,6 +1609,7 @@ mod tests {
             7,
             Ipv4Addr::new(10, 80, 0, 2),
             16,
+            None,
             Ipv4Addr::new(10, 80, 0, 1),
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
             IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
@@ -1530,6 +1623,7 @@ mod tests {
             7,
             Ipv4Addr::new(10, 80, 0, 2),
             16,
+            None,
             Ipv4Addr::new(10, 80, 0, 1),
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
             IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
@@ -1543,6 +1637,7 @@ mod tests {
             7,
             Ipv4Addr::new(10, 80, 0, 2),
             16,
+            None,
             Ipv4Addr::new(10, 80, 0, 1),
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
             IpAddr::V6("2001:db8::1".parse().unwrap()),
@@ -1559,6 +1654,7 @@ mod tests {
             7,
             Ipv4Addr::new(10, 80, 0, 2),
             16,
+            None,
             Ipv4Addr::new(10, 80, 0, 1),
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
             IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),

@@ -97,6 +97,9 @@ tunnel·physical interface index, endpoint port, endpoint와 physical gateway의
 default route, IPv4/IPv6 DNS 순서로 구성한다. IPv4 endpoint는 `route` host route를 사용하고 IPv6 endpoint는 `netsh interface
 ipv6` route를 사용한다. rollback 계획은 endpoint와 default route를 제거하고 주소와 사용한 DNS family를 DHCP로 되돌린다.
 
+dual-stack 설정은 선택적인 IPv6 tunnel 주소와 `::/0` route를 같은 계획에 추가한다. IPv6가 없는 계획은 기존 IPv4 명령만
+생성하며, rollback은 계획에 포함된 IPv6 주소와 route만 제거한다.
+
 이 계획은 명령의 구성과 검증을 담당하는 Core 경계이며, 권한 상승, 기존 route/DNS snapshot 보존, 실제 명령 실행, 중단 process
 복구는 Windows privileged adapter의 책임이다. Windows host에서 adapter가 실제로 생성되고 인터넷 연결이 유지되는지는 전용
 integration test에서 검증해야 한다.
