@@ -941,7 +941,7 @@ DISCONNECTED
 - [x] 기존 WireGuard 경로 유지
 - [x] Tunnel Engine 추상화
 - [x] 엔진 선택 설정
-- [ ] 개발 환경에서 자체 Tunnel Engine의 기능과 안정성 검증
+- [x] 개발 환경에서 자체 Tunnel Engine의 기능과 안정성 검증
 - [x] 실패 시 WireGuard로 되돌리는 절차 작성
 - [x] 자체 프로토콜 검증 전 WireGuard 제거 금지
 

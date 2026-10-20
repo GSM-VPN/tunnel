@@ -80,6 +80,13 @@ and the running transition in that order. A synchronization failure is
 treated as an unhealthy start, so the Controller does not report a partially
 restored Core as running.
 
+To validate the development-time Controller/Core contract against the actual
+Rust binary, run `scripts/test-tunnel-core-integration.sh` on Unix. The test
+starts a disposable Core process and checks initialization, network policy,
+peer registration, start, and health over the real Unix socket. It does not
+claim privileged TUN, routing, NAT, Gateway, or public-network coverage; those
+remain dedicated environment-level checks.
+
 For operations, `CoreController.CollectMetrics` combines the Core health label
 with the eleven secret-free counters returned by `GetStatistics`. It refuses
 to query a stopped or unhealthy Core and uses consecutive request IDs for the
