@@ -27,6 +27,9 @@ pub enum SessionEvent {
     KeepaliveSucceeded,
     KeepaliveTimeout,
     NetworkChanged,
+    /// The server restarted; discard the old data-plane session and retry a
+    /// fresh authenticated handshake.
+    ServerRestarted,
     RekeyRequested,
     RekeySucceeded,
     RekeyFailed,
@@ -270,7 +273,9 @@ impl SessionMachine {
             }
             (
                 LifecycleState::Established,
-                SessionEvent::KeepaliveTimeout | SessionEvent::NetworkChanged,
+                SessionEvent::KeepaliveTimeout
+                | SessionEvent::NetworkChanged
+                | SessionEvent::ServerRestarted,
             ) => (LifecycleState::Reconnecting, Some(self.next_retry_delay()?)),
             (LifecycleState::Rekeying, SessionEvent::RekeyFailed) => {
                 (LifecycleState::Closing, None)
@@ -492,6 +497,27 @@ mod tests {
         let transition = session.apply(SessionEvent::NetworkChanged).unwrap();
         assert_eq!(transition.to, LifecycleState::Reconnecting);
         assert_eq!(transition.reconnect_delay, Some(Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn server_restart_reconnects_with_a_fresh_handshake() {
+        let mut session = SessionMachine::new(SessionPolicy::default());
+        for event in [
+            SessionEvent::ConnectRequested,
+            SessionEvent::HandshakeStarted,
+            SessionEvent::HandshakeSucceeded,
+        ] {
+            session.apply(event).unwrap();
+        }
+
+        let transition = session.apply(SessionEvent::ServerRestarted).unwrap();
+        assert_eq!(transition.to, LifecycleState::Reconnecting);
+        assert_eq!(transition.reconnect_delay, Some(Duration::from_secs(1)));
+        assert_eq!(session.reconnect_attempts(), 0);
+
+        session.apply(SessionEvent::RetryRequested).unwrap();
+        session.apply(SessionEvent::HandshakeStarted).unwrap();
+        assert_eq!(session.handshake_attempts(), 1);
     }
 
     #[test]
