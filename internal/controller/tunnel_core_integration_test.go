@@ -35,7 +35,7 @@ func TestTunnelCoreBinaryManagementContract(t *testing.T) {
 	socketPath := fmt.Sprintf("/tmp/gsm-tunnel-core-it-%d.sock", os.Getpid())
 	_ = os.Remove(socketPath)
 	t.Cleanup(func() { _ = os.Remove(socketPath) })
-	process, err := StartCore(context.Background(), CoreCommand{
+	coreConfig := CoreCommand{
 		BinaryPath: binaryPath,
 		SocketPath: socketPath,
 		MaxPeers:   4,
@@ -43,7 +43,8 @@ func TestTunnelCoreBinaryManagementContract(t *testing.T) {
 			// Deterministic test identity; it is never sent over IPC.
 			"SERVER_PRIVATE_KEY=" + base64.StdEncoding.EncodeToString(make([]byte, 32)),
 		},
-	})
+	}
+	process, err := StartCore(context.Background(), coreConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,6 +84,32 @@ func TestTunnelCoreBinaryManagementContract(t *testing.T) {
 	if health != "running" {
 		t.Fatalf("unexpected Tunnel Core health: %q", health)
 	}
+
+	if err := process.Stop(); err != nil {
+		t.Fatalf("stop Tunnel Core for restart: %v", err)
+	}
+	if err := process.Wait(); err != nil {
+		t.Logf("Tunnel Core stopped for restart: %v", err)
+	}
+	waitForManagementSocketRemoved(t, socketPath)
+
+	process, err = StartCore(context.Background(), coreConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForManagementSocket(t, socketPath)
+
+	restartedClient := Client{SocketPath: socketPath, Timeout: time.Second}
+	if _, err := restartedClient.Initialize(6); err != nil {
+		t.Fatalf("initialize restarted Tunnel Core: %v", err)
+	}
+	restartedHealth, err := restartedClient.GetHealth(7)
+	if err != nil {
+		t.Fatalf("read restarted Tunnel Core health: %v", err)
+	}
+	if restartedHealth != "running" {
+		t.Fatalf("unexpected restarted Tunnel Core health: %q", restartedHealth)
+	}
 }
 
 func waitForManagementSocket(t *testing.T, path string) {
@@ -95,4 +122,16 @@ func waitForManagementSocket(t *testing.T, path string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("Tunnel Core did not create management socket: %s", path)
+}
+
+func waitForManagementSocketRemoved(t *testing.T, path string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("Tunnel Core management socket was not removed: %s", path)
 }
