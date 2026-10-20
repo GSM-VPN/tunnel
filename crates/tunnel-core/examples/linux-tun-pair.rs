@@ -58,11 +58,13 @@ fn main() -> Result<(), String> {
     println!("ready client=gsmclient0 server=gsmserver0");
 
     let stop_file = std::env::var_os("GSM_TUN_STOP_FILE").ok_or("GSM_TUN_STOP_FILE is required")?;
+    let mut sent = 0;
+    let mut received = 0;
     for _ in 0..20_000 {
-        pump_send(&mut client)?;
-        pump_send(&mut server)?;
-        pump_receive(&mut client)?;
-        pump_receive(&mut server)?;
+        sent += usize::from(pump_send(&mut client)?);
+        sent += usize::from(pump_send(&mut server)?);
+        received += usize::from(pump_receive(&mut client)?);
+        received += usize::from(pump_receive(&mut server)?);
         if Path::new(&stop_file).exists() {
             break;
         }
@@ -70,7 +72,7 @@ fn main() -> Result<(), String> {
     }
     drop(client);
     drop(server);
-    println!("closed");
+    println!("closed sent={sent} received={received}");
     Ok(())
 }
 
@@ -80,19 +82,19 @@ fn loopback(port: u16) -> SocketAddr {
 }
 
 #[cfg(target_os = "linux")]
-fn pump_send<D: TunnelDevice>(tunnel: &mut PlainTunnel<D>) -> Result<(), String> {
+fn pump_send<D: TunnelDevice>(tunnel: &mut PlainTunnel<D>) -> Result<bool, String> {
     match tunnel.send_next() {
-        Ok(_) => Ok(()),
-        Err(error) if is_transient(&error) => Ok(()),
+        Ok(_) => Ok(true),
+        Err(error) if is_transient(&error) => Ok(false),
         Err(error) => Err(format!("tunnel send failed: {error:?}")),
     }
 }
 
 #[cfg(target_os = "linux")]
-fn pump_receive<D: TunnelDevice>(tunnel: &mut PlainTunnel<D>) -> Result<(), String> {
+fn pump_receive<D: TunnelDevice>(tunnel: &mut PlainTunnel<D>) -> Result<bool, String> {
     match tunnel.receive_next() {
-        Ok(_) => Ok(()),
-        Err(error) if is_transient(&error) => Ok(()),
+        Ok(_) => Ok(true),
+        Err(error) if is_transient(&error) => Ok(false),
         Err(error) => Err(format!("tunnel receive failed: {error:?}")),
     }
 }
