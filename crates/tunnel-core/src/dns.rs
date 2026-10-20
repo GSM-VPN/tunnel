@@ -226,6 +226,17 @@ impl DnsPolicy {
             search_domains,
         })
     }
+
+    /// Returns only upstreams that can be reached through the requested IP
+    /// family, preserving the configured order.
+    #[must_use]
+    pub fn upstreams_for_family(&self, ipv6: bool) -> Vec<DnsUpstream> {
+        self.upstreams
+            .iter()
+            .filter(|upstream| upstream.address.is_ipv6() == ipv6)
+            .cloned()
+            .collect()
+    }
 }
 
 impl DnsSecureUpstream {
@@ -611,6 +622,34 @@ mod tests {
         assert_eq!(plan.apply_commands()[0].program, "resolvectl");
         assert_eq!(plan.apply_commands()[0].args[2], "1.1.1.1");
         assert_eq!(plan.apply_commands()[1].args[2], "example.test");
+    }
+
+    #[test]
+    fn selects_dns_upstreams_by_ip_family_without_reordering() {
+        let policy = DnsPolicy::new(
+            vec![
+                upstream(IpAddr::V6(Ipv6Addr::LOCALHOST)),
+                upstream(IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))),
+                upstream(IpAddr::V6("2001:db8::53".parse().unwrap())),
+            ],
+            vec![],
+        )
+        .unwrap();
+        assert_eq!(
+            policy
+                .upstreams_for_family(true)
+                .iter()
+                .map(|item| item.address)
+                .collect::<Vec<_>>(),
+            vec![
+                IpAddr::V6(Ipv6Addr::LOCALHOST),
+                "2001:db8::53".parse().unwrap()
+            ]
+        );
+        assert_eq!(
+            policy.upstreams_for_family(false)[0].address,
+            IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))
+        );
     }
 
     #[test]

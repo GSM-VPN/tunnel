@@ -39,6 +39,15 @@ and dual-stack budget validation are covered by Core tests; path-MTU discovery,
 ICMP Packet Too Big handling, and host-specific measurements remain integration
 work.
 
+`PathMtuObservation` is the boundary for that integration work. A privileged
+adapter may pass the interface MTU, the probed path MTU, and an optional MTU
+carried by an ICMP Packet Too Big/fragmentation-needed error. The core rejects
+values below the IPv6 minimum or above the interface and exposes the smallest
+safe value as `effective_tunnel_mtu()`. This prevents a packet-too-big signal
+from silently increasing the configured MTU. The adapter still owns probing,
+error-queue parsing, and environment-specific benchmarking; the core model is
+covered by deterministic tests.
+
 Before enabling a full-tunnel route, preserve a route to the UDP endpoint.
 Before changing firewall rules, capture the existing rules and provide a
 rollback path. The Rust library only builds a declarative Kill Switch plan;
@@ -118,6 +127,13 @@ remain owned by the privileged caller.
 
 `LinuxClientNetworkPlan` adds validated IPv4/IPv6 addresses for the TUN
 interface and emits address setup before routing, followed by reverse cleanup.
+
+DNS upstreams are represented as IP addresses rather than IPv4-only strings.
+`DnsPolicy::upstreams_for_family` lets an adapter select IPv6 or IPv4 resolvers
+without changing order or falling back across address families accidentally.
+The existing `LinuxDnsPlan` remains a `resolvectl` command planner, so external
+DNS-leak tests and OS-specific resolver behavior must be run by each platform
+adapter before those deployment checkboxes are considered complete.
 It is still a command planner; applying the commands and restoring a route
 snapshot belong to the privileged platform adapter.
 
