@@ -66,6 +66,17 @@ type PeerApproval struct {
 	DeviceID  string
 }
 
+// GatewayApprovalResult is the normalized result an eventual Gateway/VPN
+// Server adapter hands to the Controller. The adapter owns transport and
+// login concerns; this value contains only the signed authorization input
+// needed by the Controller boundary.
+type GatewayApprovalResult struct {
+	SignatureParts []string
+	Signature      string
+	Approval       PeerApproval
+	RequestID      uint64
+}
+
 // Validate checks service authorization before it crosses into Core state.
 func (approval PeerApproval) Validate(now time.Time, expectedServerID string) error {
 	if approval.PeerID == 0 || strings.TrimSpace(approval.UserID) == "" || len(approval.UserID) > 256 {
@@ -129,6 +140,18 @@ func (authorization VPNServerAuthorization) Approve(ctx context.Context, parts [
 		return err
 	}
 	return authorization.Controller.ApplyPeerApproval(ctx, peer, requestID)
+}
+
+// ReceiveApproval applies one authenticated Gateway result without exposing
+// the eventual Gateway transport contract to the Core or protocol packages.
+func (authorization VPNServerAuthorization) ReceiveApproval(ctx context.Context, result GatewayApprovalResult) error {
+	return authorization.Approve(
+		ctx,
+		append([]string(nil), result.SignatureParts...),
+		result.Signature,
+		result.Approval,
+		result.RequestID,
+	)
 }
 
 // Revoke verifies the service signature and removes an approval from desired
