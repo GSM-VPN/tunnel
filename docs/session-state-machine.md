@@ -1,4 +1,4 @@
-# Session state machine
+# 세션 상태 머신
 
 `SessionMachine` uses these states:
 
