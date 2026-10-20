@@ -1,4 +1,5 @@
 #![cfg(target_os = "windows")]
+#![allow(unsafe_code)]
 
 use std::ffi::OsStr;
 use std::sync::Arc;
