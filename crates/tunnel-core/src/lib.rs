@@ -18,6 +18,9 @@ mod transport;
 #[cfg(target_os = "linux")]
 mod linux_device;
 
+#[cfg(target_os = "windows")]
+mod wintun_device;
+
 mod identity;
 mod ip_packet;
 mod key_rotation;
@@ -84,3 +87,5 @@ pub use session_endpoint::{SessionEndpointError, SessionEndpointTable};
 pub use session_table::{SessionTable, SessionTableError};
 pub use throughput::{FairByteRateLimiter, ThroughputMeter, ThroughputPolicy, ThroughputSample};
 pub use transport::{DatagramQueue, DatagramQueueError, TransportError, UdpTransport};
+#[cfg(target_os = "windows")]
+pub use wintun_device::WintunDevice;
