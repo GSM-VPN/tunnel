@@ -92,6 +92,31 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+  controller-core-integration:
+    name: Controller and Rust Core integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up Rust
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Download Go dependencies
+        run: go mod download
+
+      - name: Run binary management contract
+        run: ./scripts/test-tunnel-core-integration.sh
+
   rust:
     name: Rust
     runs-on: ubuntu-latest
