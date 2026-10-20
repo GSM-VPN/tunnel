@@ -79,6 +79,11 @@ server verifies the connecting process UID against the socket owner.
 that rejects engine, peer, session, and configuration mutations with 403;
 the default bind permits the Controller's mutating control plane.
 
+The release-facing evidence and environment gates are summarized in
+[`release-verification-matrix.md`](./release-verification-matrix.md). Keep the
+matrix's `required` entries separate from local unit and IPC integration
+results; passing local tests is not a production-readiness decision.
+
 `CoreController` keeps a secret-free desired state for network configuration
 and approved peers. On every Core start or restart, `CoreSynchronizer` waits
 for the IPC socket and applies initialization, configuration, peer approvals,
