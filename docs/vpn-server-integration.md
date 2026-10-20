@@ -76,3 +76,10 @@ IPC payload에 복사하지 않는다. 서명 실패는 승인 정보 검증 전
 VPN 서버 등록, HTTP endpoint 호출, WireGuard fallback 선택은 기존 서비스의
 API 계약이 확정된 뒤 별도 어댑터에서 구현해야 한다. 그 전까지 Tunnel Core는
 연구·개발용으로만 취급하며 기존 WireGuard 경로를 제거하지 않는다.
+
+엔진 선택 경계는 `ParseEngineSelection`이 담당한다. `wireguard`와
+`tunnel-core`는 단일 엔진 선택이며, `auto`는 Tunnel Core를 우선하고
+WireGuard를 fallback 후보로만 보존한다. `auto`에서도 fallback은 명시적인
+운영 승인 없이는 허용되지 않는다. 이 저장소는 엔진 프로세스 교체나 라우트
+전환을 자동으로 수행하지 않으므로, 실제 전환은 기존 VPN Server 배포
+어댑터와 rollback 절차에서 별도로 검증해야 한다.

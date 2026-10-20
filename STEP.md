@@ -938,12 +938,12 @@ DISCONNECTED
 
 ### 10.3. WireGuard 병행 운영
 
-- [ ] 기존 WireGuard 경로 유지
-- [ ] Tunnel Engine 추상화
-- [ ] 엔진 선택 설정
+- [x] 기존 WireGuard 경로 유지
+- [x] Tunnel Engine 추상화
+- [x] 엔진 선택 설정
 - [ ] 개발 환경에서 자체 Tunnel Engine의 기능과 안정성 검증
-- [ ] 실패 시 WireGuard로 되돌리는 절차 작성
-- [ ] 자체 프로토콜 검증 전 WireGuard 제거 금지
+- [x] 실패 시 WireGuard로 되돌리는 절차 작성
+- [x] 자체 프로토콜 검증 전 WireGuard 제거 금지
 
 ### 10.4. 완료 기준
 
