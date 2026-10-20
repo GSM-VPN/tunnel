@@ -6,6 +6,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicU64, Ordering},
     },
+    time::{Duration, SystemTime},
 };
 
 use crate::SessionId;
@@ -34,6 +35,9 @@ struct MetricsInner {
     keepalive_failures: AtomicU64,
     packet_errors: AtomicU64,
     session_traffic: Mutex<HashMap<SessionId, SessionTraffic>>,
+    reconnect_started: Mutex<HashMap<SessionId, SystemTime>>,
+    recovered_reconnects: AtomicU64,
+    recovery_millis: AtomicU64,
 }
 
 /// Thread-safe counters that never retain keys, plaintext, or user identity.
@@ -65,6 +69,14 @@ pub struct SessionMetricsSnapshot {
     pub rx_bytes: u64,
     pub tx_packets: u64,
     pub rx_packets: u64,
+}
+
+/// Secret-free reconnect timing counters.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RecoveryMetricsSnapshot {
+    pub reconnects: u64,
+    pub completed: u64,
+    pub average_recovery: Option<Duration>,
 }
 
 impl Metrics {
@@ -150,6 +162,54 @@ impl Metrics {
 
     pub fn record_reconnect(&self) {
         self.inner.reconnects.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Records the beginning of a reconnect and retains only its start time.
+    pub fn record_reconnect_start(&self, session_id: SessionId, started_at: SystemTime) {
+        self.record_reconnect();
+        if let Ok(mut reconnects) = self.inner.reconnect_started.lock()
+            && (reconnects.len() < MAX_SESSION_METRICS || reconnects.contains_key(&session_id))
+        {
+            reconnects.insert(session_id, started_at);
+        }
+    }
+
+    /// Completes a reconnect and returns its measured duration when valid.
+    #[must_use]
+    pub fn record_reconnect_recovered(
+        &self,
+        session_id: SessionId,
+        recovered_at: SystemTime,
+    ) -> Option<Duration> {
+        let started_at = self
+            .inner
+            .reconnect_started
+            .lock()
+            .ok()?
+            .remove(&session_id)?;
+        let duration = recovered_at.duration_since(started_at).ok()?;
+        self.inner
+            .recovered_reconnects
+            .fetch_add(1, Ordering::Relaxed);
+        let millis =
+            u64::try_from(duration.as_millis().min(u128::from(u64::MAX))).unwrap_or(u64::MAX);
+        self.inner
+            .recovery_millis
+            .fetch_add(millis, Ordering::Relaxed);
+        Some(duration)
+    }
+
+    #[must_use]
+    pub fn recovery_snapshot(&self) -> RecoveryMetricsSnapshot {
+        let completed = self.inner.recovered_reconnects.load(Ordering::Relaxed);
+        let average_recovery = (completed > 0).then(|| {
+            Duration::from_millis(self.inner.recovery_millis.load(Ordering::Relaxed) / completed)
+        });
+        RecoveryMetricsSnapshot {
+            reconnects: self.inner.reconnects.load(Ordering::Relaxed),
+            completed,
+            average_recovery,
+        }
     }
 
     pub fn record_handshake_failure(&self) {
@@ -251,5 +311,32 @@ mod tests {
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.tx_packets, 400);
         assert_eq!(snapshot.tx_bytes, 400);
+    }
+
+    #[test]
+    fn measures_average_reconnect_recovery_without_retaining_session_data() {
+        let metrics = Metrics::default();
+        let first = SessionId::new(7).unwrap();
+        let second = SessionId::new(8).unwrap();
+        let start = std::time::UNIX_EPOCH + std::time::Duration::from_secs(10);
+        metrics.record_reconnect_start(first, start);
+        metrics.record_reconnect_start(second, start);
+        assert_eq!(
+            metrics.record_reconnect_recovered(first, start + std::time::Duration::from_secs(2)),
+            Some(std::time::Duration::from_secs(2))
+        );
+        assert_eq!(
+            metrics.record_reconnect_recovered(second, start + std::time::Duration::from_secs(4)),
+            Some(std::time::Duration::from_secs(4))
+        );
+        assert_eq!(
+            metrics.recovery_snapshot(),
+            super::RecoveryMetricsSnapshot {
+                reconnects: 2,
+                completed: 2,
+                average_recovery: Some(std::time::Duration::from_secs(3)),
+            }
+        );
+        assert_eq!(metrics.record_reconnect_recovered(first, start), None);
     }
 }

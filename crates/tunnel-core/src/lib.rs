@@ -60,7 +60,7 @@ pub use management::{
 };
 #[cfg(unix)]
 pub use management_server::UnixManagementServer;
-pub use metrics::{Metrics, MetricsSnapshot, SessionMetricsSnapshot};
+pub use metrics::{Metrics, MetricsSnapshot, RecoveryMetricsSnapshot, SessionMetricsSnapshot};
 pub use network::{
     LinuxClientNetworkPlan, LinuxClientRoutePlan, LinuxKillSwitchPlan, LinuxNetworkPlan,
     LinuxRouteSnapshot, LinuxRouteState, MtuBudget, NetworkCommand, NetworkConfigError,
