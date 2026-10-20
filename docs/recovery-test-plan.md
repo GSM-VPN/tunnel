@@ -1,8 +1,7 @@
 # 장애 복구 통합 테스트 계획
 
-이 문서는 권한 있는 Linux host에서 수행할 외부 통합 검증의 실행 조건과
-증거 형식을 정의한다. macOS 또는 일반 개발 환경에서 Rust 단위 테스트만
-통과한 것은 아래 항목의 완료가 아니다.
+이 문서는 권한 있는 Linux host에서 수행할 외부 통합 검증의 실행 조건과 증거 형식을 정의한다. macOS 또는 일반 개발 환경에서 Rust 단위 테스트만 통과한 것은
+아래 항목의 완료가 아니다.
 
 ## 사전 조건
 
@@ -12,9 +11,8 @@
 - 동일 commit으로 빌드한 client/server process
 - namespace, veth, route, firewall rule을 제거하는 cleanup trap
 
-실행기는 kernel, `ip` version, commit, process command line, namespace
-topology, MTU, loss/delay/reorder 설정, cleanup 결과를 출력해야 한다.
-자신이 만든 자원을 모두 제거했음을 증명하지 못하면 테스트는 실패해야 한다.
+실행기는 kernel, `ip` version, commit, process command line, namespace topology, MTU, loss/delay/reorder
+설정, cleanup 결과를 출력해야 한다. 자신이 만든 자원을 모두 제거했음을 증명하지 못하면 테스트는 실패해야 한다.
 
 ## 시나리오 표
 
@@ -56,6 +54,5 @@ cleanup:
 status: pass | fail | blocked
 ```
 
-필요한 권한이나 네트워크 기능이 없는 host에서는 `blocked`가 올바른
-결과다. 이를 실제 network-integration 또는 recovery 체크 통과로 바꾸지
+필요한 권한이나 네트워크 기능이 없는 host에서는 `blocked`가 올바른 결과다. 이를 실제 network-integration 또는 recovery 체크 통과로 바꾸지
 않는다.
