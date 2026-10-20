@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::fmt;
 use std::sync::{Arc, Mutex};
 
 /// Errors returned by a tunnel device.
@@ -11,6 +12,28 @@ pub enum DeviceError {
     Poisoned,
     Io(std::io::ErrorKind),
 }
+
+impl fmt::Display for DeviceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Closed => formatter.write_str("tunnel device is closed"),
+            Self::WouldBlock => formatter.write_str("tunnel device has no packet ready"),
+            Self::PacketTooLarge { actual, mtu } => {
+                write!(formatter, "packet size {actual} exceeds MTU {mtu}")
+            }
+            Self::BufferTooSmall { buffer, packet } => {
+                write!(
+                    formatter,
+                    "buffer size {buffer} is smaller than packet size {packet}"
+                )
+            }
+            Self::Poisoned => formatter.write_str("tunnel device state is poisoned"),
+            Self::Io(kind) => write!(formatter, "tunnel device I/O failed: {kind}"),
+        }
+    }
+}
+
+impl std::error::Error for DeviceError {}
 
 /// Common packet I/O contract for TUN and test devices.
 pub trait TunnelDevice {
