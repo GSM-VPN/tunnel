@@ -87,6 +87,36 @@ VPN 서버 등록, HTTP endpoint 호출, WireGuard fallback 선택은 기존 서
 API 계약이 확정된 뒤 별도 어댑터에서 구현해야 한다. 그 전까지 Tunnel Core는
 연구·개발용으로만 취급하며 기존 WireGuard 경로를 제거하지 않는다.
 
+## 조직 저장소의 현재 클라이언트 계약
+
+2026-10-21 기준으로 `GSM-VPN/gateway-server`, `GSM-VPN/vpn-server`,
+private `GSM-VPN/windows-client`의 `main` 브랜치를 교차 확인했다. 현재
+`tunnel` 저장소가 소유하지 않는 서비스 흐름은 다음과 같다.
+
+1. `windows-client`는 Gateway의 `/login`을 기본 브라우저로 열어 Discord OAuth를
+   시작한다.
+2. 브라우저 로그인 완료 뒤 앱은 `gsm-vpn://` 딥링크의 일회용 로그인 코드를
+   `POST /auth/app/exchange`로 교환하고, 응답의 `accessToken`을 로컬 세션으로
+   저장한다.
+3. 이후 `Authorization: Bearer <accessToken>` 헤더로 `/servers`, `/connect`,
+   `/disconnect`를 호출한다.
+4. `/connect` 응답의 `selectedServer`와 `connection`을 사용해 클라이언트가
+   실제 WireGuard 설정과 Windows 네트워크 정책을 적용한다.
+
+공개 `gateway-server`의 현재 소스에는 위 흐름 중 직접 로그인용 `POST /login`,
+Bearer 인증이 필요한 `/servers`, `/connect`, `/disconnect`가 확인되지만,
+`/auth/app/exchange` 구현은 확인되지 않았다. 따라서 다음 사항은 외부
+서비스 릴리스 조정 없이는 완료로 표시하지 않는다.
+
+- private Windows Client의 OAuth callback 및 일회용 코드 교환 엔드포인트
+- `/auth/app/exchange`의 요청·응답·만료·재사용 방지 계약
+- Windows Client와 공개 Gateway가 동일한 릴리스 계약을 사용하는지 여부
+
+이 불일치는 `tunnel`의 Core 또는 Controller가 임의로 보완할 수 있는 구현
+세부사항이 아니다. Gateway와 Windows Client 저장소에서 계약을 먼저 일치시킨
+뒤, 필요한 경우 별도 서비스 어댑터에서 연결해야 한다. 이 저장소에서는
+Gateway API 호출이나 사용자 로그인 UI를 추가하지 않는다.
+
 엔진 선택 경계는 `ParseEngineSelection`이 담당한다. `wireguard`와
 `tunnel-core`는 단일 엔진 선택이며, `auto`는 Tunnel Core를 우선하고
 WireGuard를 fallback 후보로만 보존한다. `auto`에서도 fallback은 명시적인
