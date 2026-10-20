@@ -34,9 +34,9 @@ cargo test --workspace --all-targets --all-features
 cargo audit
 ```
 
-Rust packet parsing includes property tests over arbitrary byte sequences, and
-the Go management codec exposes fuzz targets for bounded local campaigns. Run
-both request and response parser targets with:
+Rust packet parser에는 임의 byte sequence를 대상으로 하는 property test가
+있고, Go management codec은 제한된 로컬 campaign을 위한 fuzz target을
+제공한다. request와 response parser를 함께 실행하려면 다음을 사용한다.
 
 ```bash
 cargo test --workspace --all-targets --all-features
@@ -44,22 +44,20 @@ go test ./... -run '^$'
 FUZZ_TIME=30s ./scripts/test-protocol-fuzz.sh
 ```
 
-The scheduled/manual `Fuzz` workflow runs the same script. Its seed cases cover
-truncated, empty, valid-header, and status-bearing frames; arbitrary bytes are
-then passed through the bounded decoders to assert that malformed input never
-panics.
+예약·수동 `Fuzz` workflow도 같은 script를 실행한다. seed case는 truncated,
+empty, valid-header, status-bearing frame을 포함하며 임의 byte를 제한된
+decoder에 통과시켜 malformed input이 panic을 일으키지 않음을 확인한다.
 
-Fuzzing hardens parser boundaries but does not replace network integration
-tests, cryptographic review, or an independent security assessment.
+Fuzzing은 parser 경계를 강화하지만 network integration test, 암호화 검토,
+독립적인 보안 평가를 대체하지 않는다.
 
-Device tests are split by responsibility: `device.rs` exercises the
-deterministic `MemoryDevice` queue and close semantics on every platform, while
-`linux_device.rs` contains Linux-only TUN validation and is compiled only on
-Linux. Creating `/dev/net/tun`, exchanging real IP packets, and verifying host
-interface cleanup remain privileged Linux integration tests rather than being
-mixed into the memory-device suite.
+Device test는 책임에 따라 나눈다. `device.rs`는 모든 platform에서
+결정론적인 `MemoryDevice` queue와 close semantics를 검사하고,
+`linux_device.rs`는 Linux 전용 TUN 검증을 담아 Linux에서만 compile한다.
+`/dev/net/tun` 생성, 실제 IP packet 교환, host interface cleanup 확인은
+memory-device suite에 섞지 않고 권한 있는 Linux integration test로 남긴다.
 
-On Unix, the Core process can be started with:
+Unix에서는 다음 명령으로 Core process를 시작할 수 있다.
 
 ```bash
 TUNNEL_CORE_IPC_SOCKET=/tmp/gsm-tunnel-core.sock \
@@ -67,50 +65,47 @@ TUNNEL_CORE_MAX_PEERS=216 \
 cargo run -p tunnel-core --bin tunnel-core
 ```
 
-The Go Controller's `CoreController` starts the child through `StartCore`,
-reports STARTING/RUNNING/STOPPING/STOPPED/UNHEALTHY states, and uses the
-bounded `Supervisor` policy for crash restarts. Calling `Stop` cancels
-supervision and waits for the child to be collected. The Core socket is
-local-only; data packets do not pass through the Controller. Deployment must
-run the Core and Controller under the dedicated service account that owns the
-socket. The socket is created with mode `0600`, and on Linux the management
-server verifies the connecting process UID against the socket owner.
-`bind_with_policy(..., false)` exposes a read-only management socket
-that rejects engine, peer, session, and configuration mutations with 403;
-the default bind permits the Controller's mutating control plane.
+Go Controller의 `CoreController`는 `StartCore`로 child를 시작하고
+STARTING/RUNNING/STOPPING/STOPPED/UNHEALTHY 상태를 노출하며, crash 재시작에는
+제한된 `Supervisor` policy를 사용한다. `Stop`을 호출하면 supervision을
+취소하고 child가 수거될 때까지 기다린다. Core socket은 로컬 전용이며
+data packet은 Controller를 통과하지 않는다. 배포는 socket을 소유한 전용
+service account로 Core와 Controller를 실행해야 한다. socket mode는 `0600`이고
+Linux management server는 연결 process UID를 socket owner와 비교한다.
+`bind_with_policy(..., false)`는 읽기 전용 management socket을 노출한다.
+이 socket은 engine·peer·session·configuration 변경을 `403`으로 거부하고,
+기본 bind는 Controller의 변경 제어 영역을 허용한다.
 
-The release-facing evidence and environment gates are summarized in
-[`release-verification-matrix.md`](./release-verification-matrix.md). Keep the
-matrix's `required` entries separate from local unit and IPC integration
-results; passing local tests is not a production-readiness decision.
+배포 관점의 증거와 환경 gate는
+[`release-verification-matrix.md`](./release-verification-matrix.md)에 요약한다.
+매트릭스의 `required` 항목은 로컬 unit·IPC integration 결과와 분리하며,
+로컬 테스트 통과를 production readiness 판단으로 해석하지 않는다.
 
-`CoreController` keeps a secret-free desired state for network configuration
-and approved peers. On every Core start or restart, `CoreSynchronizer` waits
-for the IPC socket and applies initialization, configuration, peer approvals,
-and the running transition in that order. A synchronization failure is
-treated as an unhealthy start, so the Controller does not report a partially
-restored Core as running.
+`CoreController`는 network configuration과 승인 peer만 포함하는 비밀 없는
+desired state를 유지한다. Core가 시작되거나 재시작될 때마다
+`CoreSynchronizer`가 IPC socket을 기다린 뒤 initialization, configuration,
+Peer 승인, running 전환을 순서대로 적용한다. 동기화가 실패하면 unhealthy
+시작으로 처리하므로 부분 복구된 Core를 running으로 보고하지 않는다.
 
-To validate the development-time Controller/Core contract against the actual
-Rust binary, run `scripts/test-tunnel-core-integration.sh` on Unix. The test
-starts a disposable Core process and checks initialization, network policy,
-peer registration, start, and health over the real Unix socket. It does not
-claim privileged TUN, routing, NAT, Gateway, or public-network coverage; those
-remain dedicated environment-level checks.
+개발 시점의 Controller/Core 계약을 실제 Rust binary로 검증하려면 Unix에서
+`scripts/test-tunnel-core-integration.sh`를 실행한다. 테스트는 폐기 가능한
+Core process를 시작하고 실제 Unix socket을 통해 initialization, network
+policy, Peer registration, start, health를 확인한다. privileged TUN,
+routing, NAT, Gateway, public network 범위는 주장하지 않으며 별도 환경
+검증으로 남긴다.
 
-For operations, `CoreController.CollectMetrics` combines the Core health label
-with the eleven secret-free counters returned by `GetStatistics`. It refuses
-to query a stopped or unhealthy Core and uses consecutive request IDs for the
-two IPC calls. The snapshot contains no keys, plaintext packets, DNS query
-contents, or per-user identity data.
+운영 조회에서 `CoreController.CollectMetrics`는 Core health label과
+`GetStatistics`가 반환한 11개 비밀 없는 counter를 합친다. stopped 또는
+unhealthy Core에는 조회하지 않고 두 IPC 호출에 연속 request ID를 사용한다.
+snapshot에는 key, 평문 packet, DNS query 원문, 사용자별 identity data가 없다.
 
-`PlainTunnel` and `EncryptedTunnel` accept an optional `Metrics` value through
-`with_metrics`. Successful data-plane sends and receives update packet/byte
-counters, while device, transport, codec, authentication, inner-packet, and
-session-type failures increment `packet_errors`. The metrics object stores only
-atomic counters and never retains the failed datagram or its plaintext. It also
-keeps a bounded snapshot of tx/rx bytes and packets for up to 216 observed
-session IDs; management session removal removes that per-session snapshot.
+`PlainTunnel`과 `EncryptedTunnel`은 `with_metrics`를 통해 선택적인 `Metrics`
+값을 받는다. 성공한 data-plane 송수신은 packet/byte counter를 갱신하고,
+device·transport·codec·authentication·inner-packet·session type 오류는
+`packet_errors`를 증가시킨다. metrics object는 atomic counter만 저장하며
+실패한 datagram이나 평문을 보관하지 않는다. 또한 관찰된 session ID를 최대
+216개까지 tx/rx byte·packet의 제한된 snapshot으로 유지하고, management
+session 제거 시 해당 per-session snapshot도 제거한다.
 
 VPN Server 승인 연동은 [`vpn-server-integration.md`](./vpn-server-integration.md)의
 경계를 따른다. Controller는 Gateway/VPN Server의 정규화된 승인 정보와
@@ -120,44 +115,40 @@ HMAC 서명만 받고, 로그인 API나 `GATEWAY_SHARED_SECRET` 원문을 Rust C
 키 변경 운영 절차는 [`key-lifecycle.md`](./key-lifecycle.md)에 따른다.
 Gateway shared secret 교체는 Controller 서비스 인증 재시작으로 처리하고,
 Server private key 교체는 기존 Core 세션을 종료한 뒤 새 장기 신원으로 Core를
-재시작한다. 두 변경을 하나의 무중단 롤링 절차로 합치지 않는다.
+재시작한다. 두 변경을 하나의 무중단 rolling 절차로 합치지 않는다.
 
-`ListSessions` is the peer-level connection status boundary. Each returned
-13-byte record contains `session_id`, `peer_id`, and the lifecycle state code;
-it does not include keys, packet contents, or user profile data. The Controller
-can therefore render per-peer connection state without transporting the data
-plane through Go.
+`ListSessions`는 Peer 수준 connection status 경계다. 반환되는 13바이트
+record에는 `session_id`, `peer_id`, lifecycle state code가 들어가며 key,
+packet 내용, 사용자 profile data는 포함하지 않는다. 따라서 Controller는
+data plane을 Go로 옮기지 않고 Peer별 connection state를 표시할 수 있다.
 
-The final state byte uses the stable `LifecycleState` mapping `0=Disconnected`,
+최종 state byte는 안정적인 `LifecycleState` 매핑을 사용한다. `0=Disconnected`,
 `1=Connecting`, `2=Handshaking`, `3=Established`, `4=Rekeying`,
-`5=Reconnecting`, `6=Closing`, and `7=Closed`. Session creation and listing
-tests assert the record shape and the established-state value.
+`5=Reconnecting`, `6=Closing`, `7=Closed`다. Session 생성·목록 테스트는
+record shape와 established state 값을 확인한다.
 
-`DnsUpstreamSelector` preserves the validated upstream order for a resolver
-adapter. A failed query advances to the next provider and wraps around after
-the last one; a successful query keeps the current provider selected. The
-selector exposes bounded per-upstream success/failure counters and measured
-latency totals, but stores no query names, response bodies, or user-specific
-history.
-The current Core has no DNS response cache, so it cannot retain an arbitrary or
-indefinite result for censorship-avoidance purposes. It exposes only the
-validated policy cursor; any future TTL cache must add bounded expiry and a
-separate privacy review before activation.
+`DnsUpstreamSelector`는 resolver adapter를 위해 검증된 upstream 순서를
+유지한다. query가 실패하면 다음 provider로 이동하고 마지막 뒤에는 처음으로
+돌아가며, 성공하면 현재 provider를 유지한다. selector는 upstream별
+성공·실패 counter와 측정 latency 합계를 제한적으로 노출하지만 query name,
+response body, 사용자별 history는 저장하지 않는다.
+현재 Core에는 DNS response cache가 없으므로 임의의 결과를 무기한 보관해
+검열 회피에 사용할 수 없다. 검증된 policy cursor만 노출하며, 향후 TTL
+cache를 추가하려면 만료를 제한하고 별도 privacy review를 거쳐야 한다.
 
-`PeerRateLimiter` owns an independent bounded window per peer. Exhausting one
-peer's packet allowance does not consume another peer's allowance; the shared
-server queue and end-to-end fairness under load still require OS/network
-integration measurements. Management frames and UDP datagrams are bounded
-before parsing, and malformed datagrams are discarded without reaching the
-device, so invalid input has a fixed parser/work budget.
+`PeerRateLimiter`는 Peer마다 독립된 제한 window를 소유한다. 한 Peer의
+packet allowance를 모두 사용해도 다른 Peer의 allowance를 소비하지 않는다.
+공유 server queue와 부하 상태 end-to-end 공정성은 OS/network integration
+측정이 필요하다. Management frame과 UDP datagram은 parsing 전에 크기를
+제한하고 malformed datagram은 device에 도달하기 전에 폐기하므로 잘못된
+입력의 parser/work budget가 고정된다.
 
-Secret configuration follows a separate boundary: `GATEWAY_SHARED_SECRET` is
-kept by the Gateway/VPN service-authentication layer, while
-`SERVER_PRIVATE_KEY` is supplied to Rust Core through its environment and is
-parsed directly into the protected `ServerIdentity`. Neither value is stored
-in a settings file, sent through IPC, or included in status and metrics. The
-Controller receives the Gateway secret from that existing service boundary at
-initialization; it does not discover or persist a second copy of the secret.
+Secret configuration은 별도 경계를 따른다. `GATEWAY_SHARED_SECRET`는
+Gateway/VPN service-authentication layer가 보관하고, `SERVER_PRIVATE_KEY`는
+환경을 통해 Rust Core에 공급되어 보호된 `ServerIdentity`로 직접 parse된다.
+두 값 모두 settings file, IPC, status, metrics에 들어가지 않는다.
+Controller는 초기화 시 기존 service 경계에서 Gateway secret을 받으며
+secret의 두 번째 복사본을 탐색하거나 저장하지 않는다.
 
 ## 운영 권한과 DNS 정책
 
