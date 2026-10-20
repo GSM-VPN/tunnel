@@ -64,9 +64,9 @@ pub use management::{
 pub use management_server::UnixManagementServer;
 pub use metrics::{Metrics, MetricsSnapshot, RecoveryMetricsSnapshot, SessionMetricsSnapshot};
 pub use network::{
-    LinuxClientNetworkPlan, LinuxClientRoutePlan, LinuxKillSwitchPlan, LinuxNetworkPlan,
-    LinuxRouteSnapshot, LinuxRouteState, MtuBudget, NetworkCommand, NetworkConfigError,
-    PathMtuObservation, TunnelNetworkConfig,
+    LinuxClientNetworkPlan, LinuxClientRoutePlan, LinuxExternalRouteProbe, LinuxKillSwitchPlan,
+    LinuxNetworkPlan, LinuxRouteSnapshot, LinuxRouteState, MtuBudget, NetworkCommand,
+    NetworkConfigError, PathMtuObservation, TunnelNetworkConfig,
 };
 pub use noise::{NOISE_IK_PARAMS, NoiseHandshake, NoiseHandshakeError, NoiseTransport};
 pub use peer::{PeerAuthorization, PeerRegistry, PeerRegistryError, PeerSummary};
