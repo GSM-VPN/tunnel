@@ -101,6 +101,11 @@ ipv6` route를 사용한다. rollback 계획은 endpoint와 default route를 제
 복구는 Windows privileged adapter의 책임이다. Windows host에서 adapter가 실제로 생성되고 인터넷 연결이 유지되는지는 전용
 integration test에서 검증해야 한다.
 
+`WindowsKillSwitchPlan`은 전용 rule group을 사용해 outbound를 기본 차단하고 Wintun interface와 물리 interface를 통한 VPN
+endpoint UDP만 허용하는 `netsh advfirewall` 명령 계획을 만든다. rollback은 해당 rule group을 삭제하고 outbound 기본 정책을
+복원하는 명령을 출력한다. 실제 Windows 방화벽의 기존 profile 정책을 snapshot하고 원래 값으로 복원하는 책임은 privileged
+adapter에 있으며, 이 계획만으로 host 방화벽을 변경하지 않는다.
+
 DNS upstream은 IPv4 전용 문자열이 아니라 IP 주소로 표현한다. `DnsPolicy::upstreams_for_family`는 순서를 바꾸거나 family 사이에서
 잘못 fallback하지 않고 IPv6·IPv4 resolver를 고르게 한다. 외부 DNS-leak test와 OS별 resolver 동작은 각 platform adapter가
 수행해야 한다.
