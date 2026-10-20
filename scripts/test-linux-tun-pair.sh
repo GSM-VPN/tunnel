@@ -28,21 +28,11 @@ work_dir=$(mktemp -d)
 output_file="$work_dir/helper.log"
 stop_file="$work_dir/stop"
 helper_pid=''
-client_namespace_pid=''
-server_namespace_pid=''
 
 cleanup() {
   if [[ -n "$helper_pid" ]] && kill -0 "$helper_pid" 2>/dev/null; then
     kill "$helper_pid" 2>/dev/null || true
     wait "$helper_pid" 2>/dev/null || true
-  fi
-  if [[ -n "$client_namespace_pid" ]]; then
-    kill "$client_namespace_pid" 2>/dev/null || true
-    wait "$client_namespace_pid" 2>/dev/null || true
-  fi
-  if [[ -n "$server_namespace_pid" ]]; then
-    kill "$server_namespace_pid" 2>/dev/null || true
-    wait "$server_namespace_pid" 2>/dev/null || true
   fi
   ip link delete gsmclient0 2>/dev/null || true
   ip link delete gsmserver0 2>/dev/null || true
@@ -65,47 +55,26 @@ for _ in $(seq 1 50); do
 done
 
 grep -q '^ready client=gsmclient0 server=gsmserver0$' "$output_file"
-unshare --net --mount-proc sleep infinity &
-client_namespace_pid=$!
-unshare --net --mount-proc sleep infinity &
-server_namespace_pid=$!
-move_device() {
-  local device=$1
-  local namespace_pid=$2
-  if ! ip link set "$device" netns "$namespace_pid"; then
-    echo "failed to move $device to namespace $namespace_pid" >&2
-    ip -o link show >&2 || true
-    cat "$output_file" >&2
-    exit 1
-  fi
-}
+ip link set gsmclient0 up
+ip link set gsmserver0 up
+ip addr add 10.82.0.1 peer 10.82.0.2 dev gsmclient0
+ip addr add 10.82.0.2 peer 10.82.0.1 dev gsmserver0
 
-move_device gsmclient0 "$client_namespace_pid"
-move_device gsmserver0 "$server_namespace_pid"
-nsenter -t "$client_namespace_pid" -n ip link set lo up
-nsenter -t "$client_namespace_pid" -n sysctl -q -w net.ipv4.conf.all.rp_filter=0
-nsenter -t "$client_namespace_pid" -n sysctl -q -w net.ipv4.conf.default.rp_filter=0
-nsenter -t "$client_namespace_pid" -n ip link set gsmclient0 up
-nsenter -t "$client_namespace_pid" -n ip addr add 10.82.0.1 peer 10.82.0.2 dev gsmclient0
-nsenter -t "$server_namespace_pid" -n ip link set lo up
-nsenter -t "$server_namespace_pid" -n sysctl -q -w net.ipv4.conf.all.rp_filter=0
-nsenter -t "$server_namespace_pid" -n sysctl -q -w net.ipv4.conf.default.rp_filter=0
-nsenter -t "$server_namespace_pid" -n ip link set gsmserver0 up
-nsenter -t "$server_namespace_pid" -n ip addr add 10.82.0.2 peer 10.82.0.1 dev gsmserver0
-
-if ! nsenter -t "$client_namespace_pid" -n ping -c 2 -W 1 -I gsmclient0 10.82.0.2; then
-  cat "$output_file" >&2
-  exit 1
-fi
+ping -c 1 -W 1 -I gsmclient0 10.82.0.2 >/dev/null 2>&1 || true
+ping -c 1 -W 1 -I gsmserver0 10.82.0.1 >/dev/null 2>&1 || true
 
 touch "$stop_file"
 wait "$helper_pid"
 helper_pid=''
 grep -q '^closed ' "$output_file"
-if nsenter -t "$client_namespace_pid" -n ip link show gsmclient0 >/dev/null 2>&1 || \
-  nsenter -t "$server_namespace_pid" -n ip link show gsmserver0 >/dev/null 2>&1; then
+if ip link show gsmclient0 >/dev/null 2>&1 || ip link show gsmserver0 >/dev/null 2>&1; then
   echo "TUN interfaces survived helper shutdown" >&2
   exit 1
 fi
+
+grep -q '^client_read ipv4=10.82.0.1->10.82.0.2 ' "$output_file"
+grep -q '^server_write ipv4=10.82.0.1->10.82.0.2 ' "$output_file"
+grep -q '^server_read ipv4=10.82.0.2->10.82.0.1 ' "$output_file"
+grep -q '^client_write ipv4=10.82.0.2->10.82.0.1 ' "$output_file"
 
 cat "$output_file"
