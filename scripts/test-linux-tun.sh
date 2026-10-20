@@ -27,6 +27,7 @@ ip link set lo up
 
 work_dir=$(mktemp -d)
 output_file="$work_dir/helper.log"
+start_file="$work_dir/start"
 helper_pid=''
 
 cleanup() {
@@ -39,7 +40,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-"$helper_binary" >"$output_file" 2>&1 &
+GSM_TUN_START_FILE="$start_file" "$helper_binary" >"$output_file" 2>&1 &
 helper_pid=$!
 
 for _ in $(seq 1 50); do
@@ -59,6 +60,7 @@ ip link show
 ip link set gsmtest0 up
 ip addr add 10.80.0.1/16 dev gsmtest0
 ip route add 10.80.0.2/32 dev gsmtest0
+touch "$start_file"
 
 ping -c 1 -W 1 -I gsmtest0 10.80.0.2 >/dev/null 2>&1 &
 ping_pid=$!
