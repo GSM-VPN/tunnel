@@ -231,7 +231,7 @@ mod tests {
         let decoded = crate::ManagementResponse::decode(&response).unwrap();
         assert_eq!(decoded.request_id, 10);
         assert_eq!(decoded.status, STATUS_FORBIDDEN);
-        assert!(decoded.payload.is_empty());
+        assert_eq!(decoded.payload, Vec::<u8>::new());
         handle.join().unwrap().unwrap();
     }
 }
