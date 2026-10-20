@@ -689,8 +689,8 @@ Device Interface
 - [ ] Routing Table 구성
 - [ ] nftables 규칙 구성
 - [ ] SNAT/MASQUERADE 구성
-- [ ] 클라이언트별 내부 IP 검증
-- [ ] 잘못된 출발지 IP 차단
+- [x] 클라이언트별 내부 IP 검증
+- [x] 잘못된 출발지 IP 차단
 - [ ] 서버 종료 시 규칙 정리
 
 ### 6.2. 클라이언트 라우팅
