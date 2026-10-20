@@ -32,6 +32,18 @@ pub enum InnerIpPacketError {
     Ipv6Disabled,
     InvalidIpv4Checksum,
     SourceOutsideTunnel,
+    SourceNotAssigned,
+}
+
+/// Tunnel ranges and the addresses assigned to one authenticated Peer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PeerSourcePolicy {
+    pub ipv4_network: Ipv4Addr,
+    pub ipv4_prefix: u8,
+    pub ipv6_network: Ipv6Addr,
+    pub ipv6_prefix: u8,
+    pub assigned_ipv4: Option<Ipv4Addr>,
+    pub assigned_ipv6: Option<Ipv6Addr>,
 }
 
 /// Validates one complete inner IP packet against a tunnel MTU and address
@@ -88,6 +100,44 @@ pub fn validate_inner_ip_packet_from_tunnel(
         Ok(info)
     } else {
         Err(InnerIpPacketError::SourceOutsideTunnel)
+    }
+}
+
+/// Validates an inner packet against both the tunnel ranges and one approved
+/// peer's assigned addresses. This is the server-side boundary that prevents
+/// one authenticated peer from claiming another peer's virtual IP.
+///
+/// # Errors
+///
+/// Returns [`InnerIpPacketError::SourceNotAssigned`] when the packet family has
+/// no assigned address or its source differs from the approved address.
+pub fn validate_inner_ip_packet_from_peer(
+    packet: &[u8],
+    mtu: usize,
+    dual_stack: bool,
+    policy: PeerSourcePolicy,
+) -> Result<InnerIpPacketInfo, InnerIpPacketError> {
+    let info = validate_inner_ip_packet_from_tunnel(
+        packet,
+        mtu,
+        dual_stack,
+        policy.ipv4_network,
+        policy.ipv4_prefix,
+        policy.ipv6_network,
+        policy.ipv6_prefix,
+    )?;
+    let assigned = match info.source {
+        IpAddr::V4(source) => policy
+            .assigned_ipv4
+            .is_some_and(|assigned| assigned == source),
+        IpAddr::V6(source) => policy
+            .assigned_ipv6
+            .is_some_and(|assigned| assigned == source),
+    };
+    if assigned {
+        Ok(info)
+    } else {
+        Err(InnerIpPacketError::SourceNotAssigned)
     }
 }
 
@@ -212,7 +262,8 @@ mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     use super::{
-        InnerIpPacketError, InnerIpVersion, ipv4_header_checksum, validate_inner_ip_packet,
+        InnerIpPacketError, InnerIpVersion, PeerSourcePolicy, ipv4_header_checksum,
+        validate_inner_ip_packet, validate_inner_ip_packet_from_peer,
         validate_inner_ip_packet_from_tunnel,
     };
 
@@ -286,6 +337,45 @@ mod tests {
                 16,
                 Ipv6Addr::new(0xfd80, 0x1234, 0x5678, 0, 0, 0, 0, 0),
                 64,
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn rejects_a_peer_claiming_another_assigned_virtual_address() {
+        let network = Ipv4Addr::new(10, 80, 0, 0);
+        let ipv6_network = Ipv6Addr::new(0xfd80, 0x1234, 0x5678, 0, 0, 0, 0, 0);
+        let packet = ipv4(b"udp");
+        assert!(
+            validate_inner_ip_packet_from_peer(
+                &packet,
+                1_400,
+                true,
+                PeerSourcePolicy {
+                    ipv4_network: network,
+                    ipv4_prefix: 16,
+                    ipv6_network,
+                    ipv6_prefix: 64,
+                    assigned_ipv4: Some(Ipv4Addr::new(10, 80, 0, 3)),
+                    assigned_ipv6: None,
+                },
+            )
+            .is_err_and(|error| error == InnerIpPacketError::SourceNotAssigned)
+        );
+        assert!(
+            validate_inner_ip_packet_from_peer(
+                &packet,
+                1_400,
+                true,
+                PeerSourcePolicy {
+                    ipv4_network: network,
+                    ipv4_prefix: 16,
+                    ipv6_network,
+                    ipv6_prefix: 64,
+                    assigned_ipv4: Some(Ipv4Addr::new(10, 80, 0, 2)),
+                    assigned_ipv6: None,
+                },
             )
             .is_ok()
         );
