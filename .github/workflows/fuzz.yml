@@ -26,8 +26,5 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
-      - name: Fuzz request frames
-        run: go test ./internal/protocol -run '^$' -fuzz FuzzUnmarshalRequestFrameNeverPanics -fuzztime=30s
-
-      - name: Fuzz response frames
-        run: go test ./internal/protocol -run '^$' -fuzz FuzzUnmarshalResponseFrameNeverPanics -fuzztime=30s
+      - name: Fuzz management frames
+        run: ./scripts/test-protocol-fuzz.sh

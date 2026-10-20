@@ -35,13 +35,19 @@ cargo audit
 ```
 
 Rust packet parsing includes property tests over arbitrary byte sequences, and
-the Go management codec exposes fuzz targets for bounded local campaigns:
+the Go management codec exposes fuzz targets for bounded local campaigns. Run
+both request and response parser targets with:
 
 ```bash
 cargo test --workspace --all-targets --all-features
 go test ./... -run '^$'
-go test ./internal/protocol -fuzz=FuzzUnmarshalRequestFrameNeverPanics -fuzztime=30s
+FUZZ_TIME=30s ./scripts/test-protocol-fuzz.sh
 ```
+
+The scheduled/manual `Fuzz` workflow runs the same script. Its seed cases cover
+truncated, empty, valid-header, and status-bearing frames; arbitrary bytes are
+then passed through the bounded decoders to assert that malformed input never
+panics.
 
 Fuzzing hardens parser boundaries but does not replace network integration
 tests, cryptographic review, or an independent security assessment.
