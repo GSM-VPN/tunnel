@@ -58,3 +58,5 @@ interpretation:
 
 코어 benchmark는 어느 호스트에서나 실행할 수 있지만, 향후 end-to-end 결과에는 server/client/MTU/bandwidth 필드가 필요하다. 기본값을
 채우거나 codec·crypto·메모리 내 세션 결과만으로 네트워크 성능을 추론하지 않는다.
+
+현재 호스트에서 실행한 Rust Core 기준선은 [`performance-results.md`](./performance-results.md)에 기록한다.
