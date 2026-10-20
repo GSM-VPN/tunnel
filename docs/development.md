@@ -192,6 +192,13 @@ Rust codec 기준 측정은 `cargo bench --package tunnel-core --bench codec`로
 
 오류는 발생 계층의 typed error로 반환하고, 상위 계층이 정책을 결정한다.
 
+| 계층 | 대표 오류 타입 | 기본 처리 |
+| --- | --- | --- |
+| 패킷·프로토콜 | `ProtocolError`, `InnerIpPacketError`, `ManagementError` | 현재 입력만 폐기하고 루프 유지 |
+| 장치·전송 | `DeviceError`, `TransportError` | 일시 오류는 재시도 정책으로 전달하고 종료 오류는 세션 정리 |
+| 세션·인증 | `SessionError`, `CryptoError`, `NoiseHandshakeError` | 영향을 받은 세션을 닫고 키·Replay 상태 재사용 금지 |
+| Controller·관리 | `ErrCore*`, 승인·권한 오류 | 작업만 실패시키고 다른 세션과 프로세스는 유지 |
+
 - 프로토콜 codec과 IPC framing 오류는 해당 datagram/connection만 폐기한다.
   원문 payload나 키 자료를 오류 문자열에 포함하지 않는다.
 - UDP·TUN의 일시적인 I/O 오류는 호출자에게 운영 오류로 반환한다. 재시도는
