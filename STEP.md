@@ -670,11 +670,11 @@ Device Interface
 
 ### 5.4. 완료 기준
 
-- [ ] Linux Client TUN에서 Server TUN으로 패킷이 전달된다.
-- [ ] Server TUN에서 Client TUN으로 패킷이 전달된다.
-- [ ] 양방향 IP 패킷 전달이 확인된다.
-- [ ] 잘못된 패킷이 거부된다.
-- [ ] 정상 종료가 가능하다.
+- [x] Linux Client TUN에서 Server TUN으로 패킷이 전달된다.
+- [x] Server TUN에서 Client TUN으로 패킷이 전달된다.
+- [x] 양방향 IP 패킷 전달이 확인된다.
+- [x] 잘못된 패킷이 거부된다.
+- [x] 정상 종료가 가능하다.
 
 ---
 

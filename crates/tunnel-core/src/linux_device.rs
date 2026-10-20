@@ -85,6 +85,32 @@ impl LinuxTunDevice {
     pub fn name(&self) -> &str {
         &self.name
     }
+
+    /// Configures non-blocking packet I/O for event-loop based integrations.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DeviceError::Io`] when the file descriptor flags cannot be
+    /// read or updated.
+    pub fn set_nonblocking(&self, nonblocking: bool) -> Result<(), DeviceError> {
+        let file = self.file.as_ref().ok_or(DeviceError::Closed)?;
+        let descriptor = file.as_raw_fd();
+        // SAFETY: `descriptor` is an open file descriptor owned by `file`.
+        let flags = unsafe { libc::fcntl(descriptor, libc::F_GETFL) };
+        if flags < 0 {
+            return Err(DeviceError::Io(std::io::Error::last_os_error().kind()));
+        }
+        let updated = if nonblocking {
+            flags | libc::O_NONBLOCK
+        } else {
+            flags & !libc::O_NONBLOCK
+        };
+        // SAFETY: `descriptor` remains valid while `file` is borrowed.
+        if unsafe { libc::fcntl(descriptor, libc::F_SETFL, updated) } < 0 {
+            return Err(DeviceError::Io(std::io::Error::last_os_error().kind()));
+        }
+        Ok(())
+    }
 }
 
 fn validate_interface_name(name: &str) -> Result<(), DeviceError> {
