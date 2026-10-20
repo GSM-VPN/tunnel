@@ -978,6 +978,7 @@ DISCONNECTED
 - [ ] VPN Endpoint 예외 경로
 - [ ] DNS 설정
 - [ ] IPv6 차단 또는 라우팅
+- [x] Wintun interface와 VPN Endpoint 예외를 포함한 Windows 방화벽 kill switch 명령 계획 구현
 - [ ] 방화벽 규칙
 - [ ] 설정 복원
 - [ ] 비정상 종료 후 복구
