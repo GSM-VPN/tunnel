@@ -130,7 +130,7 @@ jobs:
           toolchain: stable
 
       - name: Run Linux TUN smoke test
-        run: sudo ./scripts/test-linux-tun.sh
+        run: sudo env "PATH=$PATH" ./scripts/test-linux-tun.sh
 
   dependency-audit:
     name: Dependency audit
