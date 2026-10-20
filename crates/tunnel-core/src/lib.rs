@@ -69,7 +69,7 @@ pub use metrics::{Metrics, MetricsSnapshot, RecoveryMetricsSnapshot, SessionMetr
 pub use network::{
     LinuxClientNetworkPlan, LinuxClientRoutePlan, LinuxExternalRouteProbe, LinuxKillSwitchPlan,
     LinuxNetworkPlan, LinuxRouteSnapshot, LinuxRouteState, MtuBudget, NetworkCommand,
-    NetworkConfigError, PathMtuObservation, TunnelNetworkConfig,
+    NetworkConfigError, PathMtuObservation, TunnelNetworkConfig, WindowsClientNetworkPlan,
 };
 pub use noise::{NOISE_IK_PARAMS, NoiseHandshake, NoiseHandshakeError, NoiseTransport};
 pub use peer::{PeerAuthorization, PeerRegistry, PeerRegistryError, PeerSummary};

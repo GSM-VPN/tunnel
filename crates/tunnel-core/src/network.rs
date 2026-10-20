@@ -120,6 +120,9 @@ pub enum NetworkConfigError {
     InvalidPathMtu,
     InvalidPacketTooBigMtu,
     InvalidRouteProbeOutput,
+    InvalidInterfaceIndex,
+    EmptyDnsServers,
+    InvalidDnsAddress,
 }
 
 /// One argv-safe command emitted by the privileged Linux network adapter.
@@ -391,6 +394,243 @@ pub struct LinuxClientNetworkPlan {
     pub tunnel_ipv4: Ipv4Addr,
     pub tunnel_ipv6: Option<Ipv6Addr>,
     pub routes: LinuxClientRoutePlan,
+}
+
+/// Windows client address, route, and DNS transition plan.
+///
+/// The plan only emits argv-safe records. A privileged Windows adapter owns
+/// command execution, snapshots of the pre-VPN state, and recovery after an
+/// interrupted transition.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WindowsClientNetworkPlan {
+    pub interface_name: String,
+    pub tunnel_interface_index: u32,
+    pub physical_interface_index: u32,
+    pub tunnel_ipv4: Ipv4Addr,
+    pub tunnel_prefix: u8,
+    pub tunnel_gateway: Ipv4Addr,
+    pub endpoint: SocketAddr,
+    pub physical_gateway: IpAddr,
+    pub dns_servers: Vec<IpAddr>,
+}
+
+impl WindowsClientNetworkPlan {
+    /// Creates a Windows network transition plan without changing host state.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when an interface name or index is invalid, the IPv4
+    /// prefix is outside its range, the endpoint and physical gateway use
+    /// different address families, or DNS input is not usable.
+    pub fn new(
+        interface_name: impl Into<String>,
+        tunnel_interface_index: u32,
+        physical_interface_index: u32,
+        tunnel_ipv4: Ipv4Addr,
+        tunnel_prefix: u8,
+        tunnel_gateway: Ipv4Addr,
+        endpoint: SocketAddr,
+        physical_gateway: IpAddr,
+        dns_servers: Vec<IpAddr>,
+    ) -> Result<Self, NetworkConfigError> {
+        let interface_name = interface_name.into();
+        if !valid_windows_interface_name(&interface_name) {
+            return Err(NetworkConfigError::InvalidInterfaceName);
+        }
+        if tunnel_interface_index == 0 || physical_interface_index == 0 {
+            return Err(NetworkConfigError::InvalidInterfaceIndex);
+        }
+        if tunnel_prefix > 32 {
+            return Err(NetworkConfigError::InvalidIpv4Prefix);
+        }
+        if endpoint.port() == 0 {
+            return Err(NetworkConfigError::InvalidUdpPort);
+        }
+        if endpoint.ip().is_ipv4() != physical_gateway.is_ipv4() {
+            return Err(NetworkConfigError::EndpointGatewayFamilyMismatch);
+        }
+        if dns_servers.is_empty() {
+            return Err(NetworkConfigError::EmptyDnsServers);
+        }
+        if dns_servers
+            .iter()
+            .any(|server| server.is_unspecified() || server.is_multicast())
+        {
+            return Err(NetworkConfigError::InvalidDnsAddress);
+        }
+        Ok(Self {
+            interface_name,
+            tunnel_interface_index,
+            physical_interface_index,
+            tunnel_ipv4,
+            tunnel_prefix,
+            tunnel_gateway,
+            endpoint,
+            physical_gateway,
+            dns_servers,
+        })
+    }
+
+    /// Builds address, endpoint exception, default route, and DNS commands.
+    #[must_use]
+    pub fn apply_commands(&self) -> Vec<NetworkCommand> {
+        let interface = windows_interface_arg(&self.interface_name);
+        let mut commands = vec![NetworkCommand::new(
+            "netsh",
+            [
+                "interface".to_owned(),
+                "ipv4".to_owned(),
+                "set".to_owned(),
+                "address".to_owned(),
+                interface.clone(),
+                "static".to_owned(),
+                self.tunnel_ipv4.to_string(),
+                ipv4_netmask(self.tunnel_prefix).to_string(),
+                self.tunnel_gateway.to_string(),
+                "1".to_owned(),
+            ],
+        )];
+        commands.push(self.endpoint_route_command("add"));
+        commands.push(NetworkCommand::new(
+            "route",
+            [
+                "add".to_owned(),
+                "0.0.0.0".to_owned(),
+                "mask".to_owned(),
+                "0.0.0.0".to_owned(),
+                self.tunnel_gateway.to_string(),
+                "if".to_owned(),
+                self.tunnel_interface_index.to_string(),
+                "metric".to_owned(),
+                "1".to_owned(),
+            ],
+        ));
+        commands.extend(self.dns_commands(interface, "set"));
+        commands
+    }
+
+    /// Builds commands that remove the transition and return address/DNS to DHCP.
+    #[must_use]
+    pub fn rollback_commands(&self) -> Vec<NetworkCommand> {
+        let interface = windows_interface_arg(&self.interface_name);
+        let mut commands = vec![self.endpoint_route_command("delete")];
+        commands.push(NetworkCommand::new(
+            "route",
+            [
+                "delete".to_owned(),
+                "0.0.0.0".to_owned(),
+                "if".to_owned(),
+                self.tunnel_interface_index.to_string(),
+            ],
+        ));
+        commands.push(NetworkCommand::new(
+            "netsh",
+            [
+                "interface".to_owned(),
+                "ipv4".to_owned(),
+                "set".to_owned(),
+                "address".to_owned(),
+                interface.clone(),
+                "source=dhcp".to_owned(),
+            ],
+        ));
+        commands.extend(self.dns_commands(interface, "set-dhcp"));
+        commands
+    }
+
+    fn endpoint_route_command(&self, action: &str) -> NetworkCommand {
+        match self.endpoint.ip() {
+            IpAddr::V4(address) => NetworkCommand::new(
+                "route",
+                [
+                    action.to_owned(),
+                    address.to_string(),
+                    "mask".to_owned(),
+                    "255.255.255.255".to_owned(),
+                    self.physical_gateway.to_string(),
+                    "if".to_owned(),
+                    self.physical_interface_index.to_string(),
+                ],
+            ),
+            IpAddr::V6(address) => NetworkCommand::new(
+                "netsh",
+                [
+                    "interface".to_owned(),
+                    "ipv6".to_owned(),
+                    action.to_owned(),
+                    "route".to_owned(),
+                    format!("{address}/128"),
+                    format!("interface={}", self.physical_interface_index),
+                    format!("nexthop={}", self.physical_gateway),
+                ],
+            ),
+        }
+    }
+
+    fn dns_commands(&self, interface: String, action: &str) -> Vec<NetworkCommand> {
+        if action == "set-dhcp" {
+            return [false, true]
+                .into_iter()
+                .filter(|is_ipv6| {
+                    self.dns_servers
+                        .iter()
+                        .any(|server| server.is_ipv6() == *is_ipv6)
+                })
+                .map(|is_ipv6| {
+                    let family = if is_ipv6 { "ipv6" } else { "ipv4" };
+                    NetworkCommand::new(
+                        "netsh",
+                        [
+                            "interface".to_owned(),
+                            family.to_owned(),
+                            "set".to_owned(),
+                            "dnsservers".to_owned(),
+                            interface.clone(),
+                            "source=dhcp".to_owned(),
+                        ],
+                    )
+                })
+                .collect();
+        }
+        let mut family_indexes = [(false, 0usize), (true, 0usize)];
+        let mut commands = Vec::new();
+        for server in &self.dns_servers {
+            let is_ipv6 = server.is_ipv6();
+            let family_index = usize::from(is_ipv6);
+            family_indexes[family_index].1 += 1;
+            let index = family_indexes[family_index].1;
+            let (family, address_action) = if is_ipv6 {
+                ("ipv6", "dnsservers")
+            } else {
+                ("ipv4", "dnsservers")
+            };
+            let command = match action {
+                "set" if index == 1 => vec![
+                    "interface".to_owned(),
+                    family.to_owned(),
+                    "set".to_owned(),
+                    address_action.to_owned(),
+                    interface.clone(),
+                    "source=static".to_owned(),
+                    format!("address={server}"),
+                    "register=primary".to_owned(),
+                    "validate=no".to_owned(),
+                ],
+                "set" => vec![
+                    "interface".to_owned(),
+                    family.to_owned(),
+                    "add".to_owned(),
+                    address_action.to_owned(),
+                    interface.clone(),
+                    format!("address={server}"),
+                    format!("index={index}"),
+                ],
+                _ => unreachable!("validated Windows DNS command action"),
+            };
+            commands.push(NetworkCommand::new("netsh", command));
+        }
+        commands
+    }
 }
 
 impl LinuxClientNetworkPlan {
@@ -914,6 +1154,26 @@ fn valid_interface_name(name: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(&byte))
 }
 
+fn valid_windows_interface_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 255
+        && !name.bytes().any(|byte| byte.is_ascii_control())
+        && !name.contains('"')
+}
+
+fn windows_interface_arg(name: &str) -> String {
+    format!("name=\"{name}\"")
+}
+
+fn ipv4_netmask(prefix: u8) -> Ipv4Addr {
+    let mask = if prefix == 0 {
+        0
+    } else {
+        u32::MAX << (32 - prefix)
+    };
+    Ipv4Addr::from(mask)
+}
+
 fn endpoint_is_inside_tunnel(endpoint: IpAddr, config: &TunnelNetworkConfig) -> bool {
     match endpoint {
         IpAddr::V4(address) => contains_ipv4(config.ipv4_network, config.ipv4_prefix, address),
@@ -1041,7 +1301,7 @@ mod tests {
     use super::{
         LinuxClientNetworkPlan, LinuxClientRoutePlan, LinuxExternalRouteProbe, LinuxKillSwitchPlan,
         LinuxNetworkPlan, LinuxRouteSnapshot, LinuxRouteState, MtuBudget, NetworkConfigError,
-        PathMtuObservation, TunnelNetworkConfig,
+        PathMtuObservation, TunnelNetworkConfig, WindowsClientNetworkPlan,
     };
 
     fn valid_ipv4_packet(payload: &[u8]) -> Vec<u8> {
@@ -1057,6 +1317,122 @@ mod tests {
         let checksum = crate::ipv4_header_checksum(&packet[..20]);
         packet[10..12].copy_from_slice(&checksum.to_be_bytes());
         packet
+    }
+
+    #[test]
+    fn builds_argv_safe_windows_client_plan_and_rollback() {
+        let plan = WindowsClientNetworkPlan::new(
+            "GSM Tunnel",
+            42,
+            7,
+            Ipv4Addr::new(10, 80, 0, 2),
+            16,
+            Ipv4Addr::new(10, 80, 0, 1),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+            IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
+            vec![
+                IpAddr::V4(Ipv4Addr::new(10, 80, 0, 1)),
+                IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1)),
+                IpAddr::V6("2001:4860:4860::8888".parse().unwrap()),
+            ],
+        )
+        .unwrap();
+
+        let apply = plan.apply_commands();
+        assert_eq!(apply[0].program, "netsh");
+        assert!(apply[0].args.contains(&"name=\"GSM Tunnel\"".to_owned()));
+        assert!(apply[0].args.contains(&"255.255.0.0".to_owned()));
+        assert_eq!(apply[1].program, "route");
+        assert!(apply[1].args.contains(&"203.0.113.10".to_owned()));
+        assert!(apply.iter().any(|command| {
+            command
+                .args
+                .iter()
+                .any(|argument| argument == "address=1.1.1.1")
+        }));
+        assert!(apply.iter().any(|command| {
+            command
+                .args
+                .iter()
+                .any(|argument| argument == "address=2001:4860:4860::8888")
+        }));
+
+        let rollback = plan.rollback_commands();
+        assert!(rollback.iter().any(|command| {
+            command
+                .args
+                .iter()
+                .any(|argument| argument == "source=dhcp")
+        }));
+        assert_eq!(
+            rollback
+                .iter()
+                .filter(|command| command
+                    .args
+                    .iter()
+                    .any(|argument| argument == "source=dhcp"))
+                .count(),
+            3
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_windows_network_plan_values() {
+        let valid_dns = vec![IpAddr::V4(Ipv4Addr::new(1, 1, 1, 1))];
+        let result = WindowsClientNetworkPlan::new(
+            "bad\"name",
+            42,
+            7,
+            Ipv4Addr::new(10, 80, 0, 2),
+            16,
+            Ipv4Addr::new(10, 80, 0, 1),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+            IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
+            valid_dns.clone(),
+        );
+        assert_eq!(result, Err(NetworkConfigError::InvalidInterfaceName));
+
+        let result = WindowsClientNetworkPlan::new(
+            "GSM Tunnel",
+            0,
+            7,
+            Ipv4Addr::new(10, 80, 0, 2),
+            16,
+            Ipv4Addr::new(10, 80, 0, 1),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+            IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
+            valid_dns.clone(),
+        );
+        assert_eq!(result, Err(NetworkConfigError::InvalidInterfaceIndex));
+
+        let result = WindowsClientNetworkPlan::new(
+            "GSM Tunnel",
+            42,
+            7,
+            Ipv4Addr::new(10, 80, 0, 2),
+            16,
+            Ipv4Addr::new(10, 80, 0, 1),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+            IpAddr::V6("2001:db8::1".parse().unwrap()),
+            valid_dns,
+        );
+        assert_eq!(
+            result,
+            Err(NetworkConfigError::EndpointGatewayFamilyMismatch)
+        );
+
+        let result = WindowsClientNetworkPlan::new(
+            "GSM Tunnel",
+            42,
+            7,
+            Ipv4Addr::new(10, 80, 0, 2),
+            16,
+            Ipv4Addr::new(10, 80, 0, 1),
+            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 10)), 51_820),
+            IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
+            vec![IpAddr::V4(Ipv4Addr::UNSPECIFIED)],
+        );
+        assert_eq!(result, Err(NetworkConfigError::InvalidDnsAddress));
     }
 
     #[test]
