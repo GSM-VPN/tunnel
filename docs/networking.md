@@ -87,6 +87,20 @@ physical network가 바뀌면 `LinuxClientRoutePlan::rebind_endpoint`가 초기 
 `LinuxClientNetworkPlan`은 검증된 IPv4/IPv6 주소를 TUN interface에 추가하고, 주소 설정을 routing보다 먼저 수행한 뒤 역순
 cleanup을 출력한다.
 
+## Windows 네트워크 계획
+
+`WindowsClientNetworkPlan`은 Wintun adapter를 실제로 변경하지 않고 Windows host adapter가 실행할
+`netsh`·`route` 명령의 argv-safe record를 만든다. interface friendly name은 따옴표와 control character를 거부하고,
+tunnel·physical interface index, endpoint port, endpoint와 physical gateway의 address family, DNS 주소를 실행 전에 검증한다.
+
+적용 계획은 tunnel IPv4 주소와 netmask를 설정한 뒤 physical gateway를 통한 endpoint 예외 경로, tunnel interface를 통한 IPv4
+default route, IPv4/IPv6 DNS 순서로 구성한다. IPv4 endpoint는 `route` host route를 사용하고 IPv6 endpoint는 `netsh interface
+ipv6` route를 사용한다. rollback 계획은 endpoint와 default route를 제거하고 주소와 사용한 DNS family를 DHCP로 되돌린다.
+
+이 계획은 명령의 구성과 검증을 담당하는 Core 경계이며, 권한 상승, 기존 route/DNS snapshot 보존, 실제 명령 실행, 중단 process
+복구는 Windows privileged adapter의 책임이다. Windows host에서 adapter가 실제로 생성되고 인터넷 연결이 유지되는지는 전용
+integration test에서 검증해야 한다.
+
 DNS upstream은 IPv4 전용 문자열이 아니라 IP 주소로 표현한다. `DnsPolicy::upstreams_for_family`는 순서를 바꾸거나 family 사이에서
 잘못 fallback하지 않고 IPv6·IPv4 resolver를 고르게 한다. 외부 DNS-leak test와 OS별 resolver 동작은 각 platform adapter가
 수행해야 한다.

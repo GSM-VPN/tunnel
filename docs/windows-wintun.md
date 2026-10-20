@@ -55,3 +55,7 @@ Wintun 소스 저장소의 소스와 문서는 GPLv2 조건을 따르며, 공식
   수행하지만 Wintun driver 설치와 실제 adapter 생성은 수행하지 않는다.
 - 실제 검증 전에는 Windows Wintun의 adapter·네트워크·인터넷 연결
   체크포인트를 완료 처리하지 않는다.
+
+Windows adapter의 주소·route·DNS 전환은 [`networking.md`](./networking.md)의
+`WindowsClientNetworkPlan`이 argv-safe 계획으로 표현한다. 이 계획을 실행하는
+권한 상승 계층과 실제 Wintun adapter 연결 검증은 아직 별도 integration 범위다.
