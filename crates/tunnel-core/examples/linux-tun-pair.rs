@@ -99,13 +99,13 @@ fn pump_receive<D: TunnelDevice>(tunnel: &mut PlainTunnel<D>) -> Result<(), Stri
 
 #[cfg(target_os = "linux")]
 fn is_transient(error: &TunnelError) -> bool {
-    match error {
+    matches!(
+        error,
         TunnelError::Device(DeviceError::Io(io::ErrorKind::WouldBlock))
-        | TunnelError::Transport(TransportError::Io(
-            io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut,
-        )) => true,
-        _ => false,
-    }
+            | TunnelError::Transport(TransportError::Io(
+                io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut,
+            ))
+    )
 }
 
 #[cfg(not(target_os = "linux"))]
