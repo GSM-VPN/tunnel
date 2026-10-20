@@ -960,8 +960,8 @@ DISCONNECTED
 
 ### 11.1. Wintun 계층
 
-- [ ] Wintun 라이브러리 조사
-- [ ] Wintun 배포 및 라이선스 검토
+- [x] Wintun 라이브러리 조사
+- [x] Wintun 배포 및 라이선스 검토
 - [ ] 어댑터 생성
 - [ ] 어댑터 제거
 - [ ] 패킷 읽기
