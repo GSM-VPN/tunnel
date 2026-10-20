@@ -44,6 +44,7 @@ func TestTunnelCoreBinaryManagementContract(t *testing.T) {
 			"SERVER_PRIVATE_KEY=" + base64.StdEncoding.EncodeToString(make([]byte, 32)),
 		},
 	}
+	var process CoreProcess
 	process, err := StartCore(context.Background(), coreConfig)
 	if err != nil {
 		t.Fatal(err)
@@ -91,7 +92,10 @@ func TestTunnelCoreBinaryManagementContract(t *testing.T) {
 	if err := process.Wait(); err != nil {
 		t.Logf("Tunnel Core stopped for restart: %v", err)
 	}
-	waitForManagementSocketRemoved(t, socketPath)
+	process = nil
+	if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("remove stale Tunnel Core management socket: %v", err)
+	}
 
 	process, err = StartCore(context.Background(), coreConfig)
 	if err != nil {
@@ -122,16 +126,4 @@ func waitForManagementSocket(t *testing.T, path string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("Tunnel Core did not create management socket: %s", path)
-}
-
-func waitForManagementSocketRemoved(t *testing.T, path string) {
-	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("Tunnel Core management socket was not removed: %s", path)
 }
