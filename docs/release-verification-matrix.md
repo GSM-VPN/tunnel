@@ -36,6 +36,15 @@ WireGuard 경로와 rollback 절차를 유지한다.
 | 인증·암호화·Replay·세션 수명주기 | `noise`, `crypto`, `session`, `key_rotation` 테스트 | 배포 환경 보안 승인이나 외부 감사는 포함하지 않음 |
 | Go Controller와 Rust Core IPC | `scripts/test-tunnel-core-integration.sh`와 Go Controller 테스트 | Gateway 로그인과 VPN Server 외부 HTTP 서비스는 포함하지 않음 |
 
+최종 검증 요약의 로컬 항목은 다음 자동화 근거로 대응한다.
+
+| 최종 검증 항목 | 자동화 근거 | 한계 |
+| --- | --- | --- |
+| 단위 테스트 | Go·Rust CI job | 외부 운영 환경은 포함하지 않음 |
+| 통합 테스트 | Controller/Core binary contract, Linux TUN smoke·pair CI | 실제 VPN 서비스와 공용 인터넷은 포함하지 않음 |
+| 네트워크 Namespace 테스트 | `linux-tun-pair` job의 root namespace 격리 실행 | forwarding/NAT/external internet은 포함하지 않음 |
+| 보안 테스트 | protocol fuzzing 및 crypto/noise/session/peer 테스트 | 독립 보안 검토와 leak 테스트는 포함하지 않음 |
+
 반대로 실제 VPN Server의 IP forwarding/NAT, DNS·IPv6 leak, Windows
 Wintun, Kill Switch, 외부 인터넷 출구와 독립 보안 검토는 이 표의
 `required` 상태를 유지한다. 해당 항목은 권한 있는 환경에서 재현 결과를
