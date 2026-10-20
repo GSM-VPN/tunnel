@@ -378,6 +378,41 @@ mod tests {
     }
 
     #[test]
+    fn nonce_domain_separates_session_direction_and_generation() {
+        let key = [7; 32];
+        let session = SessionId::new(7).expect("session ID");
+        let other_session = SessionId::new(8).expect("session ID");
+        let first = SessionCipher::new(key, session, KeyGeneration(2), 1)
+            .seal(header(1), b"same payload")
+            .expect("first packet seals");
+        let different_direction = SessionCipher::new(key, session, KeyGeneration(2), 2)
+            .seal(header(1), b"same payload")
+            .expect("direction packet seals");
+        let different_generation = SessionCipher::new(key, session, KeyGeneration(3), 1)
+            .seal(header(1), b"same payload")
+            .expect("generation packet seals");
+        let different_session = SessionCipher::new(key, other_session, KeyGeneration(2), 1)
+            .seal(header(1), b"same payload")
+            .expect("session packet seals");
+
+        assert_ne!(first.payload, different_direction.payload);
+        assert_ne!(first.payload, different_generation.payload);
+        assert_ne!(first.payload, different_session.payload);
+    }
+
+    #[test]
+    fn rejects_authenticated_header_tampering() {
+        let key = [7; 32];
+        let session = SessionId::new(7).expect("session ID");
+        let sender = SessionCipher::new(key, session, KeyGeneration(2), 1);
+        let mut receiver = SessionCipher::new(key, session, KeyGeneration(2), 1);
+        let mut packet = sender.seal(header(1), b"secret").expect("packet seals");
+        packet.header.flags = 1;
+
+        assert_eq!(receiver.open(&packet), Err(CryptoError::InvalidCiphertext));
+    }
+
+    #[test]
     fn rejects_tampering_without_consuming_replay_slot() {
         let key = [7; 32];
         let session = SessionId::new(7).expect("session ID");
