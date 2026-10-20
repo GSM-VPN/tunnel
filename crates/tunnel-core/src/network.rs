@@ -53,6 +53,7 @@ impl PathMtuObservation {
     /// Returns an error when a measurement is below the IPv6 minimum, the
     /// path is larger than the interface, or an ICMP MTU is inconsistent with
     /// the measured path.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         interface_mtu: usize,
         path_mtu: usize,
@@ -422,6 +423,7 @@ impl WindowsClientNetworkPlan {
     /// Returns an error when an interface name or index is invalid, the IPv4
     /// prefix is outside its range, the endpoint and physical gateway use
     /// different address families, or DNS input is not usable.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         interface_name: impl Into<String>,
         tunnel_interface_index: u32,
@@ -505,7 +507,7 @@ impl WindowsClientNetworkPlan {
                 "1".to_owned(),
             ],
         ));
-        commands.extend(self.dns_commands(interface, "set"));
+        commands.extend(self.dns_commands(&interface, "set"));
         commands
     }
 
@@ -534,7 +536,7 @@ impl WindowsClientNetworkPlan {
                 "source=dhcp".to_owned(),
             ],
         ));
-        commands.extend(self.dns_commands(interface, "set-dhcp"));
+        commands.extend(self.dns_commands(&interface, "set-dhcp"));
         commands
     }
 
@@ -567,7 +569,7 @@ impl WindowsClientNetworkPlan {
         }
     }
 
-    fn dns_commands(&self, interface: String, action: &str) -> Vec<NetworkCommand> {
+    fn dns_commands(&self, interface: &str, action: &str) -> Vec<NetworkCommand> {
         if action == "set-dhcp" {
             return [false, true]
                 .into_iter()
@@ -585,7 +587,7 @@ impl WindowsClientNetworkPlan {
                             family.to_owned(),
                             "set".to_owned(),
                             "dnsservers".to_owned(),
-                            interface.clone(),
+                            interface.to_owned(),
                             "source=dhcp".to_owned(),
                         ],
                     )
@@ -610,7 +612,7 @@ impl WindowsClientNetworkPlan {
                     family.to_owned(),
                     "set".to_owned(),
                     address_action.to_owned(),
-                    interface.clone(),
+                    interface.to_owned(),
                     "source=static".to_owned(),
                     format!("address={server}"),
                     "register=primary".to_owned(),
@@ -621,7 +623,7 @@ impl WindowsClientNetworkPlan {
                     family.to_owned(),
                     "add".to_owned(),
                     address_action.to_owned(),
-                    interface.clone(),
+                    interface.to_owned(),
                     format!("address={server}"),
                     format!("index={index}"),
                 ],
