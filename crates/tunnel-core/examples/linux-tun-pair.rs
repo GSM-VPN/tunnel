@@ -117,6 +117,7 @@ fn main() -> Result<(), String> {
         session,
     );
     println!("ready client=gsmclient0 server=gsmserver0");
+    io::stdout().flush().map_err(|error| error.to_string())?;
 
     let stop_file = std::env::var_os("GSM_TUN_STOP_FILE").ok_or("GSM_TUN_STOP_FILE is required")?;
     let mut sent = 0;
