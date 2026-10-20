@@ -1011,8 +1011,8 @@ DISCONNECTED
 - [x] VPN 종료 시 DNS 복원 계획
 - [x] IPv4 DNS 처리 정책
 - [x] IPv6 DNS 처리 정책
-- [ ] DNS 서버 접근 가능 여부 확인
-- [ ] DNS 장애 처리
+- [x] DNS 서버 접근 가능 여부 확인
+- [x] DNS 장애 처리
 - [ ] 외부 DNS 유출 테스트
 - [x] DoH/DoT 애플리케이션의 한계 문서화
 - [ ] 운영체제별 DNS 차이 처리

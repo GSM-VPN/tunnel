@@ -3,7 +3,7 @@
 use std::{
     collections::HashMap,
     net::IpAddr,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant, SystemTime},
 };
 
 const MAX_UPSTREAMS: usize = 8;
@@ -170,6 +170,12 @@ pub struct DnsUpstreamSelector {
     upstreams: Vec<DnsUpstream>,
     current: usize,
     metrics: Vec<DnsUpstreamMetrics>,
+}
+
+/// Failure returned when no configured upstream can answer a query.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DnsResolutionError {
+    AllUpstreamsFailed,
 }
 
 /// One argv-safe command emitted by the privileged DNS adapter.
@@ -345,6 +351,34 @@ impl DnsUpstreamSelector {
         metrics.failures = metrics.failures.saturating_add(1);
         metrics.total_latency = metrics.total_latency.saturating_add(latency);
         self.current = (self.current + 1) % self.upstreams.len();
+    }
+
+    /// Runs one platform-provided query attempt per upstream until one works.
+    ///
+    /// The closure owns the actual UDP, `DoT`, or `DoH` operation. This layer only
+    /// controls ordering and records duration; query names and responses are
+    /// never stored here.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DnsResolutionError::AllUpstreamsFailed`] when every provider
+    /// rejects the attempt.
+    pub fn resolve_with<T, E, F>(&mut self, mut query: F) -> Result<T, DnsResolutionError>
+    where
+        F: FnMut(&DnsUpstream) -> Result<T, E>,
+    {
+        for _ in 0..self.upstreams.len() {
+            let upstream = self.current().clone();
+            let started = Instant::now();
+            match query(&upstream) {
+                Ok(value) => {
+                    self.record_success_with_latency(started.elapsed());
+                    return Ok(value);
+                }
+                Err(_) => self.record_failure_with_latency(started.elapsed()),
+            }
+        }
+        Err(DnsResolutionError::AllUpstreamsFailed)
     }
 
     /// Returns provider metrics in the same order as the configured upstreams.
@@ -747,5 +781,39 @@ mod tests {
             "1.1.1.1".parse::<IpAddr>().unwrap()
         );
         assert!(super::DnsResolverPolicy::new(vec![], vec![], vec![], vec![]).is_err());
+    }
+
+    #[test]
+    fn resolves_through_failed_upstreams_and_keeps_successful_provider() {
+        let policy = DnsPolicy::new(
+            vec![
+                upstream("10.0.0.53".parse().unwrap()),
+                upstream("1.1.1.1".parse().unwrap()),
+            ],
+            vec![],
+        )
+        .unwrap();
+        let mut selector = DnsUpstreamSelector::from_policy(&policy);
+        let value = selector
+            .resolve_with(|upstream| {
+                if upstream.address == "10.0.0.53".parse::<IpAddr>().unwrap() {
+                    Err(())
+                } else {
+                    Ok("answer")
+                }
+            })
+            .unwrap();
+        assert_eq!(value, "answer");
+        assert_eq!(
+            selector.current().address,
+            "1.1.1.1".parse::<IpAddr>().unwrap()
+        );
+        assert_eq!(selector.metrics()[0].failures, 1);
+        assert_eq!(selector.metrics()[1].successes, 1);
+
+        assert_eq!(
+            selector.resolve_with(|_: &DnsUpstream| Err::<(), _>(())),
+            Err(super::DnsResolutionError::AllUpstreamsFailed)
+        );
     }
 }
