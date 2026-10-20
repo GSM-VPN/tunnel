@@ -972,6 +972,7 @@ DISCONNECTED
 
 ### 11.2. Windows 네트워크 설정
 
+- [x] Wintun adapter에 적용할 주소·Endpoint 예외 경로·기본 라우트·DNS의 검증된 명령 계획 구현
 - [ ] 가상 IP 설정
 - [ ] 기본 라우트 설정
 - [ ] VPN Endpoint 예외 경로
