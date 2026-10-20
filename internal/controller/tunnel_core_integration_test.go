@@ -107,7 +107,10 @@ func TestTunnelCoreBinaryManagementContract(t *testing.T) {
 	if _, err := restartedClient.Initialize(6); err != nil {
 		t.Fatalf("initialize restarted Tunnel Core: %v", err)
 	}
-	restartedHealth, err := restartedClient.GetHealth(7)
+	if _, err := restartedClient.Start(7); err != nil {
+		t.Fatalf("start restarted Tunnel Core: %v", err)
+	}
+	restartedHealth, err := restartedClient.GetHealth(8)
 	if err != nil {
 		t.Fatalf("read restarted Tunnel Core health: %v", err)
 	}
