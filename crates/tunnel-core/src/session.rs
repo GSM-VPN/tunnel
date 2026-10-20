@@ -131,7 +131,7 @@ impl ReconnectDataPolicy {
     }
 }
 
-/// Session timing and retry defaults from `STEP.md`.
+/// Session timing and retry defaults for the tunnel lifecycle.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SessionPolicy {
     pub handshake_timeout: Duration,
