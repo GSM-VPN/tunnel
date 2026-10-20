@@ -22,9 +22,15 @@ UDP는 전달·순서·중복 제거를 보장하지 않는다. Tunnel은 UDP �
 60초까지의 백오프를 사용하며 무한 재시도하지 않는다.
 
 서버 프로세스가 재시작되면 이전 세션의 데이터 키, Replay Window, sequence
-counter를 복원하지 않는다. Controller는 승인된 피어와 네트워크 정책만
-Core에 다시 동기화하고, 클라이언트는 새 Noise 핸드셰이크를 완료한 뒤
-새 세션을 만든다.
+counter를 복원하지 않는다. Established 세션에 `ServerRestarted` 이벤트를
+전달하면 세션은 1초 backoff의 `Reconnecting`으로 전환되고, 다음 시도는
+새 Noise 핸드셰이크에서 시작한다. Controller는 승인된 피어와 네트워크
+정책만 Core에 다시 동기화하고, 새 세션이 인증되기 전에는 이전 데이터
+키나 카운터를 재사용하지 않는다.
+
+`ServerShutdown`은 명시적인 영구 종료이므로 `Closing`으로 전환한다. 서버가
+실제로 다시 올라왔는지는 플랫폼 Controller가 확인하며, 세션 상태 머신은
+프로세스 생존 여부를 추측하지 않는다.
 
 읽기·쓰기 큐 크기와 네트워크 인터페이스 변경에 대한 OS별 정책은 실제
 Linux namespace 및 부하 실험이 끝날 때까지 별도 검증 항목으로 남긴다.
