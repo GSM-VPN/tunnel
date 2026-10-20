@@ -34,9 +34,10 @@ reassembly are outside the initial scope; callers should reject packets above
 the derived budget before encryption.
 `validate_inner_ip_packet_from_tunnel` adds the server-side source-address
 boundary: IPv4 and IPv6 sources must belong to the configured tunnel ranges.
-This prevents a client from injecting another client's address into the NAT
-path; external NAT and multi-client namespace behavior still require an
-integration test.
+When the authenticated session has a registered Peer assignment, callers use
+`validate_inner_ip_packet_from_peer` as the stronger boundary; it rejects a
+source that differs from that Peer’s assigned IPv4/IPv6 address. External NAT
+and multi-client namespace behavior still require an integration test.
 
 The same budget is derived from the configured MTU for both address families,
 so the payload limit is not a fixed IPv4-only constant. IPv6 identification
