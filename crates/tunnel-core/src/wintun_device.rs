@@ -21,6 +21,12 @@ impl WintunDevice {
     /// privileges required to install or open a Wintun adapter. The DLL path
     /// is explicit so the deployment layer can control which signed binary is
     /// loaded.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`DeviceError`] when the DLL cannot be loaded, the adapter or
+    /// session cannot be created, the MTU cannot be applied, or an input
+    /// value is outside Wintun's supported range.
     pub fn create(
         dll_path: impl AsRef<OsStr>,
         adapter_name: &str,
@@ -30,9 +36,12 @@ impl WintunDevice {
     ) -> Result<Self, DeviceError> {
         validate_mtu(mtu)?;
 
-        // SAFETY: loading a DLL is intentionally an explicit deployment
-        // boundary. The caller supplies the path to the signed Wintun binary.
-        let wintun = unsafe { wintun::load_from_path(dll_path) }.map_err(map_error)?;
+        let wintun = unsafe {
+            // SAFETY: loading a DLL is intentionally an explicit deployment
+            // boundary. The caller supplies the path to the signed Wintun binary.
+            wintun::load_from_path(dll_path)
+        }
+        .map_err(map_error)?;
         let adapter =
             wintun::Adapter::create(&wintun, adapter_name, tunnel_type, None).map_err(map_error)?;
         adapter.set_mtu(mtu).map_err(map_error)?;
@@ -110,8 +119,10 @@ impl TunnelDevice for WintunDevice {
             });
         }
         let session = self.session.as_ref().ok_or(DeviceError::Closed)?;
+        let packet_size = u16::try_from(packet.len())
+            .map_err(|_| DeviceError::Io(std::io::ErrorKind::InvalidInput))?;
         let mut writable = session
-            .allocate_send_packet(packet.len() as u16)
+            .allocate_send_packet(packet_size)
             .map_err(map_error)?;
         writable.bytes_mut().copy_from_slice(packet);
         session.send_packet(writable);
