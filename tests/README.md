@@ -13,3 +13,8 @@ The focused Linux TUN lifecycle smoke test is available at
 `scripts/test-linux-tun.sh`. It creates an isolated network namespace, sends a
 kernel-generated packet through `gsmtest0`, verifies device read/write, and
 checks that closing the helper removes the non-persistent interface.
+
+The two-sided Linux path is available at `scripts/test-linux-tun-pair.sh`. It
+creates client and server TUN interfaces plus two UDP endpoints in the same
+isolated namespace, then verifies that an ICMP echo request and reply cross the
+unencrypted tunnel before both interfaces are removed.
