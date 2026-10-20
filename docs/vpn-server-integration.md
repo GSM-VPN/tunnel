@@ -83,3 +83,20 @@ WireGuard를 fallback 후보로만 보존한다. `auto`에서도 fallback은 명
 운영 승인 없이는 허용되지 않는다. 이 저장소는 엔진 프로세스 교체나 라우트
 전환을 자동으로 수행하지 않으므로, 실제 전환은 기존 VPN Server 배포
 어댑터와 rollback 절차에서 별도로 검증해야 한다.
+
+## 완료 기준과 검증 범위
+
+현재 코어·Controller 경계에서 다음 동작은 결정론적인 테스트로 검증된다.
+
+| 기준 | 검증 근거 |
+| --- | --- |
+| 승인된 사용자만 연결 | `PeerApproval.Validate`, `CreateSession`, Rust Core 승인 검사 |
+| 권한 철회 시 세션 정리 | `RemovePeer`/`PurgeKey`와 Core의 Peer 세션 제거 테스트 |
+| 사용자별 VPN IP 격리 | 주소 풀의 중복·서버 주소 제외 테스트와 승인 주소 검증 |
+| 다중 세션 상한 | `SessionTable`, Peer Registry, 216 세션 자원 제한 테스트 |
+
+Gateway 로그인 유지, 실제 VPN Server HTTP 호출, Linux namespace를 통한
+인터넷 출구·NAT 검증은 외부 서비스와 권한 있는 네트워크 환경이 필요하다.
+따라서 이 문서의 코어 테스트 통과를 실제 배포 완료로 해석하지 않으며,
+해당 통합 테스트가 끝나기 전에는 자체 엔진을 기존 WireGuard 경로와
+대체하지 않는다.
