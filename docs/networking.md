@@ -186,7 +186,9 @@ without silently applying NAT.
 UDP 장애 정책은 [`udp-failure-policy.md`](./udp-failure-policy.md)에 따른다.
 데이터그램 손실은 무한 재전송하지 않고 세션 타임아웃·제한된 재연결로
 처리하며, 중복·재정렬은 키 세대별 Replay Window가 결정한다. Core 재시작은
-승인 상태만 복원하고 이전 세션 키와 카운터는 복원하지 않는다.
+승인 상태만 복원하고 이전 세션 키와 카운터는 복원하지 않는다. Controller가
+재시작을 확인하면 `ServerRestarted` 이벤트로 새 Noise 핸드셰이크를 시작하고,
+영구적인 `ServerShutdown`과 구분한다.
 
 `DnsCache`는 질의 원문 대신 호출자가 계산한 opaque fingerprint만 키로
 사용하고, 응답 TTL을 1초에서 24시간 사이로 제한한다. 캐시 용량은 고정되어
