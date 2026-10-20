@@ -53,7 +53,6 @@ impl PathMtuObservation {
     /// Returns an error when a measurement is below the IPv6 minimum, the
     /// path is larger than the interface, or an ICMP MTU is inconsistent with
     /// the measured path.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         interface_mtu: usize,
         path_mtu: usize,
