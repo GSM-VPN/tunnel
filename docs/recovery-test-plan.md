@@ -1,48 +1,42 @@
 # 장애 복구 통합 테스트 계획
 
-이 문서는 권한 있는 Linux 호스트에서 수행할 외부 통합 검증의 실행 조건과
-증거 형식을 정의한다. macOS 또는 일반 개발 환경에서 Rust 단위 테스트를
-통과한 것만으로 아래 항목을 완료 처리하지 않는다.
+이 문서는 권한 있는 Linux host에서 수행할 외부 통합 검증의 실행 조건과
+증거 형식을 정의한다. macOS 또는 일반 개발 환경에서 Rust 단위 테스트만
+통과한 것은 아래 항목의 완료가 아니다.
 
 ## 사전 조건
 
-- Linux kernel with `ip netns`, veth, and `/dev/net/tun` support
-- root or equivalent `CAP_NET_ADMIN` and `CAP_NET_RAW` privileges
-- isolated test network with no production routes or credentials
-- the same commit built for both client and server processes
-- a cleanup trap that removes namespaces, veth pairs, routes, and firewall rules
+- `ip netns`, veth, `/dev/net/tun`을 지원하는 Linux kernel
+- root 또는 동등한 `CAP_NET_ADMIN`·`CAP_NET_RAW` 권한
+- production route나 credential이 없는 격리된 테스트 네트워크
+- 동일 commit으로 빌드한 client/server process
+- namespace, veth, route, firewall rule을 제거하는 cleanup trap
 
-The test runner must print the kernel, `ip` version, commit, process command
-lines, namespace topology, MTU, loss/delay/reorder settings, and cleanup
-result. It must fail if cleanup cannot prove that it removed the resources it
-created.
+실행기는 kernel, `ip` version, commit, process command line, namespace
+topology, MTU, loss/delay/reorder 설정, cleanup 결과를 출력해야 한다.
+자신이 만든 자원을 모두 제거했음을 증명하지 못하면 테스트는 실패해야 한다.
 
-## Scenario matrix
+## 시나리오 표
 
-| Scenario | Injection | Expected result | Evidence |
+| 시나리오 | 주입 방법 | 기대 결과 | 증거 |
 | --- | --- | --- | --- |
-| Server restart | stop and start the server process | client enters reconnecting, performs a fresh handshake, and resumes with a new session generation | transition log, handshake count, key generation |
-| Client termination | terminate client process | server closes only that session and keeps other sessions established | session snapshots before/after |
-| UDP loss | deterministic netem loss | bounded retry/backoff, no stale packet delivery | netem configuration, reconnect metrics, packet counters |
-| Delay/reorder | deterministic netem delay and duplicate/reorder | authenticated in-window packets may arrive reordered; replayed packets are rejected | sequence outcomes and replay counters |
-| Interface change | replace client endpoint/interface | endpoint is rebound only after authenticated validation | route snapshot, endpoint table, handshake log |
-| DNS outage | block test resolver | DNS failure is bounded and route cleanup still runs | resolver commands, error class, cleanup output |
+| Server restart | server process 중지 후 재시작 | client가 reconnecting으로 이동하고 새 핸드셰이크·새 세션 세대로 복구 | transition log, handshake count, key generation |
+| Client 종료 | client process 종료 | server가 해당 session만 닫고 다른 session은 유지 | 전후 session snapshot |
+| UDP loss | 결정론적 netem loss | 제한된 retry/backoff, stale packet 전달 없음 | netem 설정, reconnect metrics, packet counter |
+| 지연·재정렬 | 결정론적 netem delay와 duplicate/reorder | 인증된 window 안의 재정렬 packet 허용, replay packet 거부 | sequence 결과와 replay counter |
+| Interface 변경 | client endpoint/interface 교체 | 인증된 검증 후에만 endpoint 재바인딩 | route snapshot, endpoint table, handshake log |
+| DNS 장애 | 테스트 resolver 차단 | DNS 실패를 제한하고 route cleanup 수행 | resolver 명령, 오류 분류, cleanup 출력 |
 
-## Run order
+## 실행 순서
 
-1. Create the client, simulated network, server, and simulated-internet
-   namespaces and record their addresses.
-2. Apply the endpoint exception route before the full-tunnel route.
-3. Start the server and client with test-only identities and capture the
-   initial session and route snapshots.
-4. Execute one failure injection at a time; do not combine failures until the
-   isolated scenario passes.
-5. Assert the expected state transitions, bounded retry count, absence of old
-   key reuse, and packet delivery boundary.
-6. Stop all processes, restore snapshots, remove firewall rules, delete veths
-   and namespaces, and verify that no test resource remains.
+1. client, simulated network, server, simulated-internet namespace를 만들고 주소를 기록한다.
+2. full-tunnel route보다 먼저 endpoint exception route를 적용한다.
+3. server와 client를 테스트 전용 identity로 시작하고 최초 session·route snapshot을 수집한다.
+4. 한 번에 하나의 장애만 주입한다. 개별 시나리오가 통과하기 전에는 장애를 조합하지 않는다.
+5. 기대한 상태 전이, 제한된 retry count, 이전 key 재사용 없음, packet 전달 경계를 확인한다.
+6. 모든 process를 중지하고 snapshot을 복구한 뒤 firewall rule, veth, namespace를 제거하고 자원이 남지 않았는지 확인한다.
 
-## Result record
+## 결과 기록
 
 ```text
 date_utc:
@@ -62,6 +56,6 @@ cleanup:
 status: pass | fail | blocked
 ```
 
-`blocked` is the correct result when the host lacks the required privileges or
-network features. It must not be converted into a passing network-integration
-or recovery checkbox.
+필요한 권한이나 네트워크 기능이 없는 host에서는 `blocked`가 올바른
+결과다. 이를 실제 network-integration 또는 recovery 체크 통과로 바꾸지
+않는다.
