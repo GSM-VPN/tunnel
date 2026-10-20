@@ -382,6 +382,29 @@ mod tests {
     }
 
     #[test]
+    fn enforces_assigned_ipv6_source_addresses() {
+        let packet = ipv6(b"udp");
+        let policy = PeerSourcePolicy {
+            ipv4_network: Ipv4Addr::new(10, 80, 0, 0),
+            ipv4_prefix: 16,
+            ipv6_network: Ipv6Addr::new(0xfd80, 0x1234, 0x5678, 0, 0, 0, 0, 0),
+            ipv6_prefix: 64,
+            assigned_ipv4: None,
+            assigned_ipv6: Some("fd80:1234:5678::2".parse().unwrap()),
+        };
+        assert!(validate_inner_ip_packet_from_peer(&packet, 1_400, true, policy).is_ok());
+
+        let mut spoofed = packet;
+        spoofed[8..24].copy_from_slice(&[
+            0xfd, 0x80, 0x12, 0x34, 0x56, 0x78, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3,
+        ]);
+        assert_eq!(
+            validate_inner_ip_packet_from_peer(&spoofed, 1_400, true, policy,),
+            Err(InnerIpPacketError::SourceNotAssigned)
+        );
+    }
+
+    #[test]
     fn rejects_malformed_versions_lengths_checksum_and_mtu() {
         assert_eq!(
             validate_inner_ip_packet(&[], 1_400, true),

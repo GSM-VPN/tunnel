@@ -157,7 +157,10 @@ mod tests {
     };
 
     use super::UnixManagementServer;
-    use crate::{ManagementRequest, ManagementService, Metrics, OPERATION_GET_HEALTH};
+    use crate::{
+        ManagementRequest, ManagementService, Metrics, OPERATION_GET_HEALTH, OPERATION_START,
+        STATUS_FORBIDDEN,
+    };
 
     #[test]
     fn serves_health_request_over_unix_socket() {
@@ -189,6 +192,46 @@ mod tests {
         assert_eq!(decoded.request_id, 9);
         assert_eq!(decoded.status, 503);
         assert_eq!(decoded.payload, b"uninitialized");
+        handle.join().unwrap().unwrap();
+    }
+
+    #[test]
+    fn read_only_socket_rejects_mutating_requests() {
+        let path = std::env::temp_dir().join(format!(
+            "gsm-tunnel-read-only-test-{}.sock",
+            std::process::id()
+        ));
+        let mut server = UnixManagementServer::bind_with_policy(
+            &path,
+            ManagementService::new(4, Metrics::default()),
+            false,
+        )
+        .unwrap();
+        let handle = std::thread::spawn(move || server.serve_once());
+        let mut client = UnixStream::connect(&path).unwrap();
+        client
+            .write_all(
+                &ManagementRequest {
+                    version: 1,
+                    request_id: 10,
+                    operation: OPERATION_START,
+                    payload: Vec::new(),
+                }
+                .encode()
+                .unwrap(),
+            )
+            .unwrap();
+
+        let mut prefix = [0; 4];
+        client.read_exact(&mut prefix).unwrap();
+        let response_length = u32::from_be_bytes(prefix) as usize;
+        let mut response = vec![0; 4 + response_length];
+        response[..4].copy_from_slice(&prefix);
+        client.read_exact(&mut response[4..]).unwrap();
+        let decoded = crate::ManagementResponse::decode(&response).unwrap();
+        assert_eq!(decoded.request_id, 10);
+        assert_eq!(decoded.status, STATUS_FORBIDDEN);
+        assert!(decoded.payload.is_empty());
         handle.join().unwrap().unwrap();
     }
 }
