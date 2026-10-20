@@ -1,6 +1,6 @@
-# Session state machine
+# 세션 상태 머신
 
-`SessionMachine` uses these states:
+`SessionMachine`은 다음 상태를 사용한다.
 
 ```text
 DISCONNECTED → CONNECTING → HANDSHAKING → ESTABLISHED
@@ -10,42 +10,38 @@ DISCONNECTED → CONNECTING → HANDSHAKING → ESTABLISHED
                                 CLOSING → CLOSED
 ```
 
-Defaults are a five-second handshake timeout, five bounded handshake attempts,
-25-second keepalive threshold, 120-second idle timeout, and reconnect backoff
-from one to 60 seconds with ten reconnect attempts.
+기본값은 핸드셰이크 timeout 5초, 제한된 핸드셰이크 시도 5회, keepalive
+threshold 25초, idle timeout 120초, 1~60초 reconnect backoff와 재연결
+10회다.
 
-The session timer maps an established connection's idle duration to one of
-three actions: no work before 25 seconds, an authenticated `Keepalive` packet
-from 25 seconds until the 120-second idle limit, or bounded reconnection at
-the idle limit. A successful keepalive does not change the established state;
-an explicit handshake timeout follows the same bounded reconnect path as
-other handshake failures.
+세션 timer는 established connection의 idle 시간을 세 동작으로 매핑한다.
+25초 전에는 아무 작업도 하지 않고, 25초부터 120초 idle limit까지는 인증된
+`Keepalive` packet을 보내며, limit에 도달하면 제한된 재연결로 전환한다.
+keepalive 성공은 established 상태를 바꾸지 않는다. 명시적인 handshake
+timeout도 다른 handshake 실패와 같은 제한된 재연결 경로를 따른다.
 
-Authentication failure, permission revocation, server shutdown, and an
-explicit close enter `CLOSING` from every non-terminal state, including a
-session that is still reconnecting. A failed rekey also enters `CLOSING`
-instead of reusing the previous data-key generation. None of these paths
-enter an unbounded retry loop. Successful handshakes reset both handshake and
-reconnect attempts; reaching the handshake limit enters `CLOSING`.
+인증 실패, 권한 철회, server shutdown, 명시적 close는 reconnecting 중인
+세션을 포함해 terminal 상태가 아닌 모든 상태에서 `CLOSING`으로 들어간다.
+rekey 실패도 이전 data-key generation을 재사용하지 않고 `CLOSING`으로
+들어간다. 어느 경로도 제한 없는 retry loop를 사용하지 않는다. 성공한
+handshake는 handshake·reconnect 시도를 모두 초기화하고, handshake 한도에
+도달하면 `CLOSING`으로 전환한다.
 
-The session tests assert that `RetryRequested` is invalid after authentication
-failure, permission revocation, rekey failure, and key purge. Key purge is a
-separate management operation: it removes the peer approval, closes every
-session owned by that peer, and does not restore the peer during a Core
-restart. A new client key requires a new explicit approval.
+세션 테스트는 인증 실패, 권한 철회, rekey 실패, key purge 뒤의
+`RetryRequested`가 유효하지 않음을 확인한다. Key purge는 별도 관리
+operation이며 Peer 승인과 해당 Peer 소유의 모든 세션을 제거한다. Core
+재시작 시 Peer를 복원하지 않고 새 client key에는 새 명시적 승인이 필요하다.
 
-The management `TerminateSession` operation is a connection-level close: it
-removes only the selected session and leaves the peer's long-term approval in
-the authorization registry. The same authorized peer can therefore create a
-new session with a new session ID. `RemovePeer` is a separate revocation
-operation; it removes the approval and all sessions belonging to that peer.
+관리 `TerminateSession` operation은 connection 수준 close다. 선택한 session만
+제거하고 authorization registry의 장기 Peer 승인은 유지한다. 따라서 같은
+승인 Peer가 새 session ID로 다시 session을 만들 수 있다. `RemovePeer`는
+별도 철회 operation이며 승인과 해당 Peer의 모든 session을 제거한다.
 
-The encrypted tunnel exposes a consuming close operation. It closes the
-device and UDP transport before the tunnel is dropped, which also discards
-its session ciphers, sequence counter, and byte counter.
+암호화 tunnel은 consuming close operation을 노출한다. tunnel을 버리기 전에
+device와 UDP transport를 닫고 session cipher, sequence counter, byte counter도
+함께 폐기한다.
 
-The encrypted data path exposes a rekey boundary for authenticated
-handshake results. A replacement must use a strictly newer key generation and
-updates both directional ciphers together. The old generation's replay
-window, sequence counter, byte counter, and age budget are discarded, so
-packets from the previous generation are rejected after the switch.
+암호화 data path는 인증된 handshake 결과를 위한 rekey 경계를 제공한다.
+교체는 반드시 더 큰 key generation을 사용해야 하며 양방향 cipher를 함께
+갱신한다. 이전 generation의 replay window, sequence counter, byte counter,
+시간 예산은 폐기하므로 교체 후 이전 generation packet은 거부한다.

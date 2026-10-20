@@ -1,9 +1,9 @@
-# GSM Tunnel protocol
+# GSM Tunnel 프로토콜
 
-The protocol identifier is `gsm-tunnel`, version `1.0.0`, and all integers use
-network byte order (big endian). The fixed tunnel header is 24 bytes:
+프로토콜 식별자는 `gsm-tunnel`, 버전은 `1.0.0`이며 모든 정수는 네트워크
+바이트 순서(big endian)를 사용한다. 고정 터널 헤더의 크기는 24바이트다.
 
-| Offset | Size | Field |
+| 오프셋 | 크기 | 필드 |
 |---:|---:|---|
 | 0 | 1 | version major |
 | 1 | 1 | version minor |
@@ -16,21 +16,19 @@ network byte order (big endian). The fixed tunnel header is 24 bytes:
 | 20 | 2 | payload length |
 | 22 | 2 | reserved, zero |
 
-The initial external packet limit is 1,400 bytes. With the 16-byte
-ChaCha20-Poly1305 tag, the maximum plaintext payload is 1,360 bytes.
+초기 외부 패킷 한도는 1,400바이트다. 16바이트 ChaCha20-Poly1305 태그를
+고려하면 평문 payload의 최대 크기는 1,360바이트다.
 
-Transport Data and Keepalive use the same AEAD boundary. The header is
-additional authenticated data; the payload is encrypted and the tag is at the
-end of the payload. Nonces are derived from session, key generation, direction,
-and sequence number. The protocol is not a replacement for a reviewed Noise
-handshake implementation yet.
+Transport Data와 Keepalive는 동일한 AEAD 경계를 사용한다. 헤더는 추가
+인증 데이터이고 payload는 암호화되며 태그는 payload 끝에 있다. Nonce는
+세션, 키 세대, 방향, sequence number로부터 파생한다. 이 프로토콜은 아직
+검토가 완료된 Noise 핸드셰이크 구현을 대체하지 않는다.
 
-Unknown versions, packet types, invalid session IDs, non-zero reserved fields,
-oversized packets, and length mismatches are rejected.
+알 수 없는 버전·패킷 타입, 잘못된 session ID, 0이 아닌 reserved 필드,
+크기 초과 패킷, 길이 불일치는 거부한다.
 
-The authenticated data path validates an inner packet before encryption and
-again after decryption, before writing it to the tunnel device. The validator
-requires an exact IPv4/IPv6 total length, checks IPv4 header checksums, applies
-the encrypted payload MTU budget, and rejects IPv6 when dual-stack mode is
-disabled. Invalid inner packets are discarded without allocating a sequence
-number or writing plaintext to a device.
+인증된 데이터 경로는 암호화 전과 복호화 후, 터널 장치에 쓰기 전에 내부
+패킷을 검증한다. 검증기는 IPv4/IPv6 전체 길이 일치, IPv4 헤더 checksum,
+암호화 payload MTU 한도, dual-stack 비활성 시 IPv6 거부를 적용한다.
+유효하지 않은 내부 패킷은 sequence number를 할당하거나 평문을 장치에
+쓰기 전에 폐기한다.

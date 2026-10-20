@@ -14,3 +14,11 @@
 Do not put keys, plaintext packets, or sensitive user data in logs, tests,
 issues, or pull requests. Keep WireGuard rollback available until this
 experimental implementation has passed independent review.
+
+## Documentation language
+
+Korean is the project's primary language. Write document titles and
+descriptions in Korean, while keeping code identifiers, commands, protocol
+field names, and external standard names in their original form for
+compatibility. See [`docs/language-policy.md`](docs/language-policy.md) for the
+full policy.
