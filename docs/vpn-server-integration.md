@@ -19,6 +19,12 @@ Core IPC payload나 Peer 상태에 들어가지 않는다.
 - Peer 등록 입력은 공개키, 허용 IP, `serverId`, `deviceId`
 - Peer 상태는 공개키, 허용 IP, handshake 시각, 송수신 카운터를 포함
 
+Controller는 이 결과를 `GatewayApprovalResult`로 받는다. 이 envelope는
+서명 대상 parts, HMAC signature, 정규화된 `PeerApproval`, request ID를 한
+경계로 묶고 `ReceiveApproval`에서 기존 HMAC·server·device·expiry·주소
+검증을 수행한다. HTTP transport와 Gateway 로그인 흐름은 envelope를 만드는
+어댑터의 책임이며 Core나 IPC 프로토콜에 노출하지 않는다.
+
 공개 저장소의 HTTP 서버 구현이 완성되지 않은 상태이므로 이 저장소는
 Gateway URL이나 엔드포인트를 추측해 직접 호출하지 않는다. 대신
 `VPNServerAuthorization`이 정규화된 승인 결과를 받는 명시적 경계를 제공한다.

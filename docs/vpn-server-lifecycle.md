@@ -16,8 +16,9 @@ VPN Server HTTP 호출은 이 저장소가 재구현하지 않으며, 외부 어
 6. Core는 승인된 서버 신원과 클라이언트 공개키로 핸드셰이크를 완료한 뒤
    세션 키와 데이터 경로를 만든다.
 
-구현 경계는 `GatewayAuthenticator`, `PeerApproval.Validate`,
-`VPNServerAuthorization.Approve`, `CoreController.ApplyPeerApproval`,
+구현 경계는 `GatewayAuthenticator`, `GatewayApprovalResult`,
+`PeerApproval.Validate`, `VPNServerAuthorization.ReceiveApproval`,
+`CoreController.ApplyPeerApproval`,
 `ManagementService` 순서로 대응한다. Gateway 로그인 자체의 성공 여부는
 외부 어댑터가 책임지고, Controller는 서명된 승인 결과만 신뢰한다.
 
