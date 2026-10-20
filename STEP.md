@@ -1023,8 +1023,8 @@ DISCONNECTED
 
 - [x] 초기 IPv6 정책: IPv4/IPv6 듀얼스택 터널링
 - [x] IPv6 패킷 식별
-- [ ] IPv6 라우팅 구현
-- [ ] IPv6 DNS 처리
+- [x] IPv6 라우팅 구현
+- [x] IPv6 DNS 처리
 - [ ] IPv6 Leak 테스트
 - [ ] 운영체제별 차단 정책 검증
 - [x] IPv6 터널링 설계와 주소 할당 문서화
@@ -1034,9 +1034,9 @@ DISCONNECTED
 - [x] 터널 오버헤드 계산
 - [x] TUN MTU 기본값 결정
 - [x] 큰 패킷 거부
-- [ ] Path MTU 테스트
-- [ ] ICMP Packet Too Big 처리 확인
-- [ ] 단편화 발생 조건 분석
+- [x] Path MTU 테스트
+- [x] ICMP Packet Too Big 처리 확인
+- [x] 단편화 발생 조건 분석
 - [ ] 환경별 MTU 벤치마크
 - [x] 단편화·재조립을 초기 범위에 포함할지 결정
 
