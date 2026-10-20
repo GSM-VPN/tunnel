@@ -1158,7 +1158,7 @@ simulated internet
 
 WireGuard와의 성능 비교는 이 프로젝트의 필수 요구사항에서 제외한다. GSM Tunnel 자체의 기능·안정성·처리량을 동일한 조건에서 반복 측정한다.
 
-- [ ] GSM Tunnel
+- [x] GSM Tunnel
 
 측정 조건:
 
@@ -1189,10 +1189,10 @@ WireGuard와의 성능 비교는 이 프로젝트의 필수 요구사항에서 �
 ### 14.4. 산출물
 
 - [x] `docs/performance.md` 작성
-- [ ] GSM Tunnel 자체 성능 결과 작성
+- [x] GSM Tunnel 자체 성능 결과 작성
 - [ ] 병목 구간 분석
 - [ ] 최적화 전후 수치 기록
-- [ ] 실행 환경과 테스트 조건 기록
+- [x] 실행 환경과 테스트 조건 기록
 
 ---
 
