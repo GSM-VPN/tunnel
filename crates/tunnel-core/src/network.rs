@@ -32,6 +32,58 @@ pub struct MtuBudget {
     pub max_encrypted_payload_size: usize,
 }
 
+/// Path MTU information collected by a platform probe or an ICMP error.
+///
+/// The core does not open raw sockets or parse operating-system error queues.
+/// A privileged adapter supplies the measurements here, and the resulting
+/// effective MTU can then be applied consistently to both IP families.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PathMtuObservation {
+    pub interface_mtu: usize,
+    pub path_mtu: usize,
+    pub packet_too_big_mtu: Option<usize>,
+}
+
+impl PathMtuObservation {
+    /// Builds a validated observation from an interface probe and optional
+    /// `ICMPv6` Packet Too Big/IPv4 fragmentation-needed MTU.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a measurement is below the IPv6 minimum, the
+    /// path is larger than the interface, or an ICMP MTU is inconsistent with
+    /// the measured path.
+    pub fn new(
+        interface_mtu: usize,
+        path_mtu: usize,
+        packet_too_big_mtu: Option<usize>,
+    ) -> Result<Self, NetworkConfigError> {
+        if interface_mtu < MIN_DUAL_STACK_MTU {
+            return Err(NetworkConfigError::InvalidInterfaceMtu);
+        }
+        if path_mtu < MIN_DUAL_STACK_MTU || path_mtu > interface_mtu {
+            return Err(NetworkConfigError::InvalidPathMtu);
+        }
+        if packet_too_big_mtu.is_some_and(|mtu| !(MIN_DUAL_STACK_MTU..=path_mtu).contains(&mtu)) {
+            return Err(NetworkConfigError::InvalidPacketTooBigMtu);
+        }
+        Ok(Self {
+            interface_mtu,
+            path_mtu,
+            packet_too_big_mtu,
+        })
+    }
+
+    /// Returns the largest tunnel MTU that does not exceed the observed path.
+    #[must_use]
+    pub const fn effective_tunnel_mtu(self) -> usize {
+        match self.packet_too_big_mtu {
+            Some(mtu) if mtu < self.path_mtu => mtu,
+            _ => self.path_mtu,
+        }
+    }
+}
+
 impl MtuBudget {
     /// Validates an inner packet against the encrypted payload budget.
     ///
@@ -64,6 +116,9 @@ pub enum NetworkConfigError {
     ClientIpv4OutsideNetwork,
     ClientIpv6OutsideNetwork,
     InvalidRouteSnapshot,
+    InvalidInterfaceMtu,
+    InvalidPathMtu,
+    InvalidPacketTooBigMtu,
 }
 
 /// One argv-safe command emitted by the privileged Linux network adapter.
@@ -936,7 +991,8 @@ mod tests {
 
     use super::{
         LinuxClientNetworkPlan, LinuxClientRoutePlan, LinuxKillSwitchPlan, LinuxNetworkPlan,
-        LinuxRouteSnapshot, LinuxRouteState, MtuBudget, NetworkConfigError, TunnelNetworkConfig,
+        LinuxRouteSnapshot, LinuxRouteState, MtuBudget, NetworkConfigError, PathMtuObservation,
+        TunnelNetworkConfig,
     };
 
     fn valid_ipv4_packet(payload: &[u8]) -> Vec<u8> {
@@ -1051,6 +1107,30 @@ mod tests {
             ..TunnelNetworkConfig::default()
         };
         assert_eq!(config.validate(), Err(NetworkConfigError::InvalidMtu));
+    }
+
+    #[test]
+    fn derives_effective_mtu_from_path_probe_and_packet_too_big() {
+        let observation = PathMtuObservation::new(1_500, 1_420, Some(1_280)).unwrap();
+        assert_eq!(observation.effective_tunnel_mtu(), 1_280);
+        let unchanged = PathMtuObservation::new(1_500, 1_420, None).unwrap();
+        assert_eq!(unchanged.effective_tunnel_mtu(), 1_420);
+    }
+
+    #[test]
+    fn rejects_inconsistent_path_mtu_observations() {
+        assert_eq!(
+            PathMtuObservation::new(1_279, 1_279, None),
+            Err(NetworkConfigError::InvalidInterfaceMtu)
+        );
+        assert_eq!(
+            PathMtuObservation::new(1_500, 1_501, None),
+            Err(NetworkConfigError::InvalidPathMtu)
+        );
+        assert_eq!(
+            PathMtuObservation::new(1_500, 1_400, Some(1_279)),
+            Err(NetworkConfigError::InvalidPacketTooBigMtu)
+        );
     }
 
     #[test]
