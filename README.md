@@ -37,6 +37,7 @@ Rust Core benchmark를 실행하고 조건·원시 결과를 보고서로 남기
 - [`docs/security-design.md`](./docs/security-design.md) — 암호화·권한·로그 경계
 - [`docs/performance.md`](./docs/performance.md) — benchmark 실행과 결과 기록
 - [`docs/platform-support.md`](./docs/platform-support.md) — Linux·Windows·macOS 범위
+- [`deploy/README.md`](./deploy/README.md) — Linux systemd 설치·설정·기동 절차
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md) — 브랜치·이슈·PR·검증 절차
 
 ## 보안 안내

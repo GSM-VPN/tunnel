@@ -16,6 +16,7 @@
 | Core 프로세스 재시작 | 로컬 통합 검증됨 | Controller/Core integration test |
 | Core benchmark | 실행기와 기준선 제공 | `scripts/run-core-benchmarks.sh` |
 | WireGuard rollback | 절차 문서화됨 | [`wireguard-rollback-policy.md`](./wireguard-rollback-policy.md) |
+| Linux Core 설치 예시 | 준비됨 | [`../deploy/README.md`](../deploy/README.md), `deploy/systemd/gsm-tunnel-core.service` |
 
 ## 현재 제한 범위
 
@@ -27,6 +28,10 @@
 - Windows Wintun adapter·라우팅·DNS·UI 종단 간 동작
 - 다중 클라이언트 외부망 성능과 장애 주입 결과
 - 독립 보안 검토와 공용 사용자 대상 배포 승인
+
+실 적용을 시작할 때는 [`deploy/README.md`](../deploy/README.md)의 env
+템플릿과 systemd 예시를 사용한다. 이 예시는 Core 프로세스와 관리 IPC만
+설정하며 운영망의 routing·NAT·DNS·firewall을 자동 변경하지 않는다.
 
 각 제한 항목의 실행 조건과 증거 형식은
 [`release-verification-matrix.md`](./release-verification-matrix.md),
