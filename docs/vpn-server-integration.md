@@ -1,5 +1,9 @@
 # VPN Server 연동 경계
 
+전체 승인·세션·철회·WireGuard 병행 생명주기는
+[`vpn-server-lifecycle.md`](./vpn-server-lifecycle.md)에 단계별로 정리한다.
+이 문서는 각 경계의 자료형과 보안 제한을 보완한다.
+
 ## 책임 분리
 
 Gateway와 VPN Server는 사용자 인증, 서비스 권한, 서버 선택, 승인 정보를
