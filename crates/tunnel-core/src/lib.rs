@@ -76,8 +76,8 @@ pub use protocol::{
 };
 pub use rate_limit::{PeerRateLimiter, RateLimitKind, RateLimitPolicy};
 pub use session::{
-    IdleAction, LifecycleState, ReconnectMeasurement, SessionError, SessionEvent, SessionMachine,
-    SessionPolicy, SessionTransitionLog, Transition,
+    IdleAction, LifecycleState, ReconnectDataPolicy, ReconnectMeasurement, SessionError,
+    SessionEvent, SessionMachine, SessionPolicy, SessionTransitionLog, Transition,
 };
 pub use session_endpoint::{SessionEndpointError, SessionEndpointTable};
 pub use session_table::{SessionTable, SessionTableError};

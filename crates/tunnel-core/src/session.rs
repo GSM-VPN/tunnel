@@ -93,6 +93,41 @@ pub enum IdleAction {
     None,
 }
 
+/// Policy for packets produced while a session is reconnecting.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReconnectDataPolicy {
+    /// Drop packets until the authenticated session is established again.
+    Drop,
+    /// Retain only a bounded number of packets and bytes for later delivery.
+    Queue {
+        max_packets: usize,
+        max_bytes: usize,
+    },
+}
+
+impl ReconnectDataPolicy {
+    /// Returns whether another packet fits within the configured reconnect
+    /// budget. Packet contents are never retained by the session state
+    /// machine; the transport adapter owns the actual queue.
+    #[must_use]
+    pub const fn accepts(
+        self,
+        packet_len: usize,
+        queued_packets: usize,
+        queued_bytes: usize,
+    ) -> bool {
+        match self {
+            Self::Drop => false,
+            Self::Queue {
+                max_packets,
+                max_bytes,
+            } => {
+                queued_packets < max_packets && packet_len <= max_bytes.saturating_sub(queued_bytes)
+            }
+        }
+    }
+}
+
 /// Session timing and retry defaults from `STEP.md`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SessionPolicy {
@@ -103,6 +138,7 @@ pub struct SessionPolicy {
     pub reconnect_base_delay: Duration,
     pub reconnect_max_delay: Duration,
     pub max_reconnect_attempts: u32,
+    pub reconnect_data: ReconnectDataPolicy,
 }
 
 impl Default for SessionPolicy {
@@ -115,6 +151,7 @@ impl Default for SessionPolicy {
             reconnect_base_delay: Duration::from_secs(1),
             reconnect_max_delay: Duration::from_secs(60),
             max_reconnect_attempts: 10,
+            reconnect_data: ReconnectDataPolicy::Drop,
         }
     }
 }
@@ -131,6 +168,20 @@ impl SessionPolicy {
     #[must_use]
     pub fn keepalive_due(&self, idle_for: Duration) -> bool {
         idle_for >= self.keepalive_after_idle && idle_for < self.idle_timeout
+    }
+
+    /// Estimates the number of keepalives emitted in a window.
+    ///
+    /// Keepalives are the transport adapter's NAT-mapping refresh mechanism;
+    /// this estimate lets a mobile adapter expose its radio/wake-up budget.
+    #[must_use]
+    pub fn keepalives_per(&self, window: Duration) -> u32 {
+        let interval = self.keepalive_after_idle.as_nanos();
+        if interval == 0 {
+            return 0;
+        }
+        let count = window.as_nanos().saturating_add(interval.saturating_sub(1)) / interval;
+        u32::try_from(count).unwrap_or(u32::MAX)
     }
 
     #[must_use]
@@ -382,6 +433,19 @@ mod tests {
             policy.idle_action(Duration::from_secs(120)),
             IdleAction::Reconnect
         );
+        assert_eq!(policy.keepalives_per(Duration::from_hours(1)), 144);
+    }
+
+    #[test]
+    fn bounds_reconnect_data_without_retaining_packet_contents() {
+        assert!(!ReconnectDataPolicy::Drop.accepts(10, 0, 0));
+        let queue = ReconnectDataPolicy::Queue {
+            max_packets: 2,
+            max_bytes: 100,
+        };
+        assert!(queue.accepts(40, 0, 0));
+        assert!(!queue.accepts(61, 1, 40));
+        assert!(!queue.accepts(1, 2, 40));
     }
 
     #[test]
@@ -405,6 +469,27 @@ mod tests {
         session.apply(SessionEvent::ConnectRequested).unwrap();
         session.apply(SessionEvent::HandshakeStarted).unwrap();
         let transition = session.apply(SessionEvent::HandshakeTimedOut).unwrap();
+        assert_eq!(transition.to, LifecycleState::Reconnecting);
+        assert_eq!(transition.reconnect_delay, Some(Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn network_change_reconnects_without_dropping_session_policy() {
+        let mut session = SessionMachine::new(SessionPolicy {
+            reconnect_data: ReconnectDataPolicy::Queue {
+                max_packets: 8,
+                max_bytes: 4_096,
+            },
+            ..SessionPolicy::default()
+        });
+        for event in [
+            SessionEvent::ConnectRequested,
+            SessionEvent::HandshakeStarted,
+            SessionEvent::HandshakeSucceeded,
+        ] {
+            session.apply(event).unwrap();
+        }
+        let transition = session.apply(SessionEvent::NetworkChanged).unwrap();
         assert_eq!(transition.to, LifecycleState::Reconnecting);
         assert_eq!(transition.reconnect_delay, Some(Duration::from_secs(1)));
     }
