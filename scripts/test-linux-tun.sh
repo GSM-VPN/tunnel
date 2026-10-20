@@ -54,6 +54,8 @@ for _ in $(seq 1 50); do
 done
 
 grep -q '^ready name=gsmtest0 mtu=1500$' "$output_file"
+cat "$output_file"
+ip link show
 ip addr add 10.80.0.1/16 dev gsmtest0
 ip link set gsmtest0 up
 ip route add 10.80.0.2/32 dev gsmtest0
