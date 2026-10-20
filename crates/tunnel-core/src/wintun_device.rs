@@ -36,12 +36,9 @@ impl WintunDevice {
     ) -> Result<Self, DeviceError> {
         validate_mtu(mtu)?;
 
-        let wintun = unsafe {
-            // SAFETY: loading a DLL is intentionally an explicit deployment
-            // boundary. The caller supplies the path to the signed Wintun binary.
-            wintun::load_from_path(dll_path)
-        }
-        .map_err(map_error)?;
+        // SAFETY: loading a DLL is intentionally an explicit deployment boundary;
+        // the caller supplies the path to the signed Wintun binary.
+        let wintun = unsafe { wintun::load_from_path(dll_path) }.map_err(map_error)?;
         let adapter =
             wintun::Adapter::create(&wintun, adapter_name, tunnel_type, None).map_err(map_error)?;
         adapter.set_mtu(mtu).map_err(map_error)?;
