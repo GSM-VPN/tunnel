@@ -35,7 +35,7 @@ func TestTunnelCoreBinaryManagementContract(t *testing.T) {
 	socketPath := fmt.Sprintf("/tmp/gsm-tunnel-core-it-%d.sock", os.Getpid())
 	_ = os.Remove(socketPath)
 	t.Cleanup(func() { _ = os.Remove(socketPath) })
-	process, err := StartCore(context.Background(), CoreCommand{
+	coreConfig := CoreCommand{
 		BinaryPath: binaryPath,
 		SocketPath: socketPath,
 		MaxPeers:   4,
@@ -43,11 +43,16 @@ func TestTunnelCoreBinaryManagementContract(t *testing.T) {
 			// Deterministic test identity; it is never sent over IPC.
 			"SERVER_PRIVATE_KEY=" + base64.StdEncoding.EncodeToString(make([]byte, 32)),
 		},
-	})
+	}
+	var process CoreProcess
+	process, err := StartCore(context.Background(), coreConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
+		if process == nil {
+			return
+		}
 		if stopErr := process.Stop(); stopErr != nil && !errors.Is(stopErr, os.ErrProcessDone) {
 			t.Errorf("stop Tunnel Core: %v", stopErr)
 		}
@@ -82,6 +87,38 @@ func TestTunnelCoreBinaryManagementContract(t *testing.T) {
 	}
 	if health != "running" {
 		t.Fatalf("unexpected Tunnel Core health: %q", health)
+	}
+
+	if err := process.Stop(); err != nil {
+		t.Fatalf("stop Tunnel Core for restart: %v", err)
+	}
+	if err := process.Wait(); err != nil {
+		t.Logf("Tunnel Core stopped for restart: %v", err)
+	}
+	process = nil
+	if err := os.Remove(socketPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("remove stale Tunnel Core management socket: %v", err)
+	}
+
+	process, err = StartCore(context.Background(), coreConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForManagementSocket(t, socketPath)
+
+	restartedClient := Client{SocketPath: socketPath, Timeout: time.Second}
+	if _, err := restartedClient.Initialize(6); err != nil {
+		t.Fatalf("initialize restarted Tunnel Core: %v", err)
+	}
+	if _, err := restartedClient.Start(7); err != nil {
+		t.Fatalf("start restarted Tunnel Core: %v", err)
+	}
+	restartedHealth, err := restartedClient.GetHealth(8)
+	if err != nil {
+		t.Fatalf("read restarted Tunnel Core health: %v", err)
+	}
+	if restartedHealth != "running" {
+		t.Fatalf("unexpected restarted Tunnel Core health: %q", restartedHealth)
 	}
 }
 
