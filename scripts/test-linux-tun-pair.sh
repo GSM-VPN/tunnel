@@ -69,8 +69,19 @@ unshare --net --mount-proc sleep infinity &
 client_namespace_pid=$!
 unshare --net --mount-proc sleep infinity &
 server_namespace_pid=$!
-ip link set gsmclient0 netns "$client_namespace_pid"
-ip link set gsmserver0 netns "$server_namespace_pid"
+move_device() {
+  local device=$1
+  local namespace_pid=$2
+  if ! ip link set "$device" netns "$namespace_pid"; then
+    echo "failed to move $device to namespace $namespace_pid" >&2
+    ip -o link show >&2 || true
+    cat "$output_file" >&2
+    exit 1
+  fi
+}
+
+move_device gsmclient0 "$client_namespace_pid"
+move_device gsmserver0 "$server_namespace_pid"
 nsenter -t "$client_namespace_pid" -n ip link set lo up
 nsenter -t "$client_namespace_pid" -n sysctl -q -w net.ipv4.conf.all.rp_filter=0
 nsenter -t "$client_namespace_pid" -n sysctl -q -w net.ipv4.conf.default.rp_filter=0
