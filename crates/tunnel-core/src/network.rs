@@ -1162,6 +1162,20 @@ mod tests {
         .unwrap();
         let commands = plan.apply_commands();
         assert_eq!(commands[0].program, "ip");
+        assert!(
+            commands.iter().any(|command| {
+                command.args == ["addr", "replace", "10.80.0.1/16", "dev", "gsm0"]
+            })
+        );
+        assert!(
+            commands
+                .iter()
+                .any(|command| { command.args == ["-w", "net.ipv4.ip_forward=1"] })
+        );
+        assert!(commands.iter().any(|command| {
+            command.args.contains(&"eth0".to_owned())
+                && command.args.contains(&"postrouting".to_owned())
+        }));
         assert!(commands.iter().any(|command| {
             command.program == "nft" && command.args.contains(&"masquerade".to_owned())
         }));
