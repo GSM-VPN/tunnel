@@ -6,8 +6,8 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
@@ -30,7 +30,11 @@ func TestTunnelCoreBinaryManagementContract(t *testing.T) {
 		t.Fatalf("Tunnel Core binary is unavailable: %v", err)
 	}
 
-	socketPath := filepath.Join(t.TempDir(), "tunnel-core.sock")
+	// Unix socket addresses have a small platform-specific path limit. Keep
+	// the integration path short enough for macOS and Linux alike.
+	socketPath := fmt.Sprintf("/tmp/gsm-tunnel-core-it-%d.sock", os.Getpid())
+	_ = os.Remove(socketPath)
+	t.Cleanup(func() { _ = os.Remove(socketPath) })
 	process, err := StartCore(context.Background(), CoreCommand{
 		BinaryPath: binaryPath,
 		SocketPath: socketPath,
