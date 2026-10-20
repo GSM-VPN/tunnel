@@ -53,7 +53,7 @@ fn measure_fair_rate_limiter() {
 
     for _ in 0..ITERATIONS {
         let mut limiter = FairByteRateLimiter::new(policy);
-        for session_id in 1..=CONCURRENT_SESSIONS as u64 {
+        for session_id in 1..=u64::from(CONCURRENT_SESSIONS) {
             admitted += usize::from(limiter.allow(session_id, PAYLOAD_BYTES, now));
         }
         black_box(limiter);
